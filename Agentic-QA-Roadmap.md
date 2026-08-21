@@ -57,7 +57,7 @@ Learn the new defect taxonomy and evaluation techniques, then write your first r
 **Week 8**
 - [x] Install Giskard and run a vulnerability scan (note: Giskard v3 replaced `scan()` with scenario-based checks - used the current API to run a real prompt-injection probe instead)
 - [x] **Project 1:** full test suite covering correctness, hallucination detection, and 5-run consistency
-- [ ] Push Project 1 to a public GitHub repo
+- [x] Push Project 1 to a public GitHub repo &rarr; https://github.com/mohit03nandan/agentic-qa-project-1
 
 ---
 
@@ -66,13 +66,13 @@ Learn the new defect taxonomy and evaluation techniques, then write your first r
 Test retrieval-augmented pipelines stage by stage — most "AI chatbot" features you'll meet in the wild are RAG.
 
 **Week 9**
-- [ ] Learn the RAG pipeline: query → embed → retrieve → inject context → generate
-- [ ] Learn RAGAS metrics: faithfulness, answer relevance, context precision/recall
+- [x] Learn the RAG pipeline: query → embed → retrieve → inject context → generate
+- [x] Learn RAGAS metrics: faithfulness, answer relevance, context precision/recall
 
 **Week 10**
-- [ ] Set up tracing with LangSmith or TruLens
-- [ ] Test a sample RAG app stage by stage: retrieval, then relevance, then faithfulness
-- [ ] Document one retrieval bug and one faithfulness bug you found
+- [x] Tracing: built a small RAG app with each stage printed/visible by hand (query → embed → retrieve → inject → generate) — LangSmith/TruLens skipped in favor of manual tracing to avoid another dependency rabbit hole
+- [x] Test a sample RAG app stage by stage: retrieval, then relevance, then faithfulness
+- [x] Documented one retrieval bug (missed the "Final Sale" exception doc) and, more importantly, a judge-reliability bug (context recall judge hallucinated a missing fact as present)
 
 ---
 

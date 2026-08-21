@@ -242,4 +242,119 @@ python giskard_injection_probe.py
 
 ---
 
-*(Next entry lands here once Phase 3, Week 9 begins.)*
+## Phase 3, Week 9 — How RAG Works, and How to Test It
+
+### The RAG pipeline - think of it as an open-book exam
+1. **You ask a question** (query) - like a student getting an exam question.
+2. **The AI turns the question into a "meaning map" location** (embedding, from Phase 1).
+3. **It searches a library of documents** (already converted to the same kind of meaning-map numbers ahead of time) to find the closest-matching pages (retrieve).
+4. **It hands those pages to the AI as reference material** (inject context) - like flipping the textbook open to the right page.
+5. **The AI writes its answer using those pages** (generate).
+
+RAG = "AI that's allowed to look things up before answering," instead of answering purely from memory.
+
+### RAGAS - four checks built for this pipeline, same exam analogy
+- **Context precision** - of the pages it flipped to, how many were actually useful? (Grabbing 10 pages when only 2 were relevant is wasteful and can confuse the answer.)
+- **Context recall** - did it find *all* the genuinely relevant pages, or miss an important one elsewhere in the book?
+- **Faithfulness** - did the final answer stick to what was actually on those pages, or wander off and add things that aren't there? (Hallucination, but specifically beyond the retrieved material.)
+- **Answer relevance** - regardless of all that, does the final answer actually address the question asked?
+
+**Why it matters for testing:** when a RAG app gives a bad answer, these four checks tell you *where* the pipeline broke - bad search (precision/recall), good search but the AI ignored it (faithfulness), or it just didn't answer the actual question (relevance). More useful than just "the answer was wrong."
+
+### Worked example - a shoe store support bot
+
+Question: **"What's your refund policy for shoes that don't fit?"**
+
+```
+ YOU ASK A QUESTION
+        |
+        v
++----------------------+
+|  1. QUERY             |   "What's your refund policy for
+|                       |    shoes that don't fit?"
++----------------------+
+        |
+        v
++----------------------+
+|  2. EMBED              |   Turns the question into a point on
+|                       |   a "meaning map" (a list of numbers)
++----------------------+
+        |
+        v
++----------------------+        +--------------------------------+
+|  3. RETRIEVE           | <----> |  DOCUMENT LIBRARY                |
+|  Finds the closest     |        |  (already turned into            |
+|  matching pages        |        |  meaning-map numbers ahead of time)|
++----------------------+        |                                  |
+        |                        |  - "Shipping takes 3-5 days"     |
+        |                        |  - "Refunds within 30 days,       |
+        |                        |     item must be unworn"  <-MATCH|
+        |                        |  - "Loyalty program details"     |
+        |                        +--------------------------------+
+        v
++----------------------+
+|  4. INJECT CONTEXT     |   New prompt built for the AI:
+|                       |   "Using ONLY this text: 'Refunds
+|                       |   accepted within 30 days, item must
+|                       |   be unworn.' Now answer: What's your
+|                       |   refund policy for shoes that don't fit?"
++----------------------+
+        |
+        v
++----------------------+
+|  5. GENERATE            |   "You can return the shoes within 30
+|                       |   days, as long as they haven't been worn."
++----------------------+
+        |
+        v
+   FINAL ANSWER SHOWN TO THE CUSTOMER
+```
+
+How the four RAGAS checks map onto this exact example:
+
+| Check | What it looks at here | How it could fail |
+|---|---|---|
+| Context precision | Only the refund doc got pulled in step 3 | If shipping/loyalty docs got pulled in too (useless, wasted, confusing) - precision drops |
+| Context recall | Was there another doc, like "Sale items are final sale, no refunds," that should've been found but wasn't? | If that exception existed but was never retrieved - recall drops |
+| Faithfulness | The final answer only repeats what step 4's text said (30 days, unworn) | If the AI added "...and you'll get a refund to your card within 5 days" - never in the source doc - that's a faithfulness failure (hallucination bolted onto real context) |
+| Answer relevance | The answer actually addresses "shoes that don't fit" | A generic refund answer that ignores the fit issue would score low here |
+
+**One-line version to remember:** retrieval (precision/recall) checks *did it find the right pages*; generation (faithfulness/relevance) checks *did it use those pages honestly and actually answer the question*. A RAG app can fail at either half - these four checks tell you which half broke.
+
+---
+
+## Phase 3, Week 10 — A Real RAG App, Tested Stage by Stage
+
+### What we built
+A tiny shoe-store support bot (`rag_app.py`): 4 documents (shipping, refunds, loyalty, a "Final Sale" exception), embedded locally with Ollama's `nomic-embed-text`, retrieved by plain cosine similarity (numpy), then answered by `llama3.2:1b`. Deliberately retrieved only the single top match (`TOP_K = 1`) to see what a narrow, naive retrieval setup misses in practice.
+
+### Real result 1 - a genuine retrieval bug
+Question: *"What's your refund policy for shoes that don't fit?"* The similarity scores actually showed:
+```
+0.667  Refunds accepted within 30 days, unworn, original box
+0.533  Final Sale items cannot be returned or exchanged   <- missed, TOP_K=1 cut it off
+0.384  Loyalty program details
+0.373  Shipping times
+```
+Only the refund doc got passed to the model. The "Final Sale" exception - clearly relevant, second-highest score - never made it in. A real customer would get an incomplete answer. This is exactly what "context recall" is supposed to catch.
+
+### Real result 2 - RAGAS-style scoring, done as plain judge prompts
+The `ragas` pip package hit a real dependency conflict with other already-installed packages (langchain-core version fights - very common across the LangChain ecosystem). Instead of chasing pip versions further, we wrote the same three checks as direct judge prompts to the local model (`rag_eval.py`) - which also shows plainly that RAGAS's metrics are just structured LLM-judge prompts under the hood, nothing magic inside the library.
+
+- **Faithfulness: correct.** The model's answer didn't invent anything - it honestly said the policy text didn't cover the question.
+- **Context precision: correct.** The judge said the one retrieved doc was relevant - true.
+- **Context recall: WRONG, in an important way.** The judge said both required facts (30-day return window, AND the Final Sale exception) were present in the retrieved text - scoring 2/2. But the Final Sale fact was never in the retrieved text at all. The judge hallucinated that a missing fact was there.
+
+### The most important lesson from this week
+Weeks 6-7 showed a bad judge wrongly *failing* good answers (false alarms). This is the opposite, more dangerous failure: **the judge wrongly said a broken system was working perfectly.** Trusting that recall score blindly would mean concluding "retrieval is fine" when it's actually missing half of what a full answer needs. A bad judge doesn't just create noise - it can hide real bugs behind a passing grade, which creates false confidence. Always spot-check what a judge is scoring against the actual raw data, especially for recall-style checks.
+
+### How to re-run this yourself later
+From `c:\Users\User\Desktop\Gen-Ai-Testing\`:
+```
+python rag_app.py
+python rag_eval.py
+```
+
+---
+
+*(Next entry lands here once Phase 4, Week 11 begins.)*
