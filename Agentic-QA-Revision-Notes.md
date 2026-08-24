@@ -357,4 +357,108 @@ python rag_eval.py
 
 ---
 
-*(Next entry lands here once Phase 4, Week 11 begins.)*
+## Phase 4, Week 11 — What Makes Something an "Agent," and the ReAct Loop
+
+### Chatbot vs. agent
+A **chatbot** just answers with words - one question, one text reply. That's the RAG bot already built (Phase 3) - it can only talk.
+
+An **agent** can actually *do* things - use tools, take multiple steps, and decide what to do next based on what just happened, without being told each step.
+
+Same shoe store, agent version: instead of "what's your refund policy," a customer says *"process a refund for order #1234."* A chatbot can't do this - it can only describe policy in words. An agent would actually: (1) look up the order, (2) check if it qualifies, (3) issue the refund, (4) confirm it's done - real actions, not just a text reply.
+
+### The ReAct loop (Reason + Act)
+A repeating loop, like a detective working a case: think about what to check, go check it, look at what was found, think about what that means, decide the next move, repeat until done.
+
+```
+THINK: "I need to check if order #1234 qualifies for a refund."
+  |
+  v
+ACT: calls a tool -> lookup_order(1234)
+  |
+  v
+OBSERVE: "Order #1234: shoes, bought 10 days ago, not final sale"
+  |
+  v
+THINK: "Within 30 days, not final sale - it qualifies. I'll refund it."
+  |
+  v
+ACT: calls a tool -> process_refund(1234)
+  |
+  v
+OBSERVE: "Refund processed successfully"
+  |
+  v
+THINK: "Done - I can tell the customer now."
+  |
+  v
+FINAL ANSWER: "Your refund has been processed."
+```
+
+**Why it matters for testing:** no longer just "was the final reply correct" - now also *did it check the right things, in the right order, and stop at the right time*. This previews Phase 5's trajectory evaluation and tool-call correctness testing.
+
+---
+
+## Phase 4, Week 12 — Tool Calling Mechanics, and Agent Memory Types
+
+### Tool/function calling
+The AI can't directly touch a database or run code. The developer gives it a "menu" ahead of time - available tools, each with a name and description of what it needs. When the AI wants to use one, it just writes out a request (e.g. "run lookup_order with order_id=1234") - a separate piece of program code actually executes it and hands the real result back to the AI.
+
+Analogy: a call-center worker who can't access the customer database directly asks a colleague to look something up. The AI is the worker - it can request things, but someone else (regular code) actually does them.
+
+**Why it matters for testing:** check two separate things - did the agent pick the *right* tool, and did it fill in the *right* arguments? A wrong order number is a quiet, dangerous bug - the agent can still confidently say "Done!" while having acted on the wrong thing. A clean-looking final reply proves nothing about what actually happened underneath.
+
+### Memory types
+- **Short-term memory** - whatever's in the current conversation (the context window, from Phase 1). Gone once the chat ends or gets too long.
+- **Long-term memory (vector store)** - things saved permanently as "meaning map" numbers (embeddings), searchable even in a brand-new conversation. Like a filing cabinet the agent can search anytime.
+- **Episodic memory** - memory of specific past events, not general facts (e.g. "last time this customer called, they were upset about a late delivery"). Diary entries about specific experiences, vs. long-term memory being more like a reference library of general facts.
+
+**Why it matters for testing:** check whether an agent forgets things mid-chat that it shouldn't (short-term/context limit, Phase 1), whether it retrieves the right saved info (retrieval testing, Phase 3), and - importantly - whether episodic memory ever leaks across users who shouldn't share it. That last one is a real privacy/security bug, not just an annoyance.
+
+---
+
+## Phase 4, Week 13 — Multi-Agent Orchestration, and MCP
+
+### Multi-agent orchestration
+Instead of one agent doing everything, split work across specialist agents, coordinated by a "manager" agent.
+
+Analogy: a call center with a supervisor who routes the customer's request to the right specialist (billing, shipping, returns). Each specialist handles only its own narrow job; the supervisor combines their answers into one final reply.
+
+Example: "Where's my order, and can I also get a refund on a different one?" - the manager sends the tracking question to a shipping agent and the refund question to a returns agent, then merges both replies.
+
+Why split it up: each specialist gets simpler, narrower instructions and tools - easier to get right, easier to test, easier to improve without breaking everything else.
+
+**Why it matters for testing:** now also test the delegation decision itself - did the manager route the sub-task to the right specialist? Real bug example: sending a refund question to the shipping agent by mistake, or never delegating and just making something up.
+
+### MCP (Model Context Protocol)
+A standard way for AI agents to connect to tools and data sources, so a tool-maker builds one connector instead of custom code for every AI app.
+
+Analogy: a universal power socket. Before something like MCP, every AI-tool integration was its own custom plug shape. MCP is the universal adapter - build one "MCP server," and any MCP-compatible agent can plug into it without custom integration work.
+
+**Why it matters for testing:** an agent using an MCP server means testing a boundary between potentially different teams - is the server returning what it claims? Is the agent using the tool correctly? Are permissions respected at that connection point? Matters a lot for Phase 5's security topics, since MCP servers are often *where* an agent gets its real-world reach (file systems, databases, other services).
+
+---
+
+## Phase 4, Week 14 — First Real Agent, Built From Scratch (2 Real Bugs Found)
+
+### What we built
+`shoe_store_agent.py` - a refund assistant with 3 tools (`lookup_order`, `process_refund`, `send_confirmation_email`), built by hand (no LangGraph/CrewAI) so the ReAct loop from Week 11 is fully visible: THINK -> ACT -> OBSERVE, repeat, using Ollama's native tool-calling support directly. Framework skipped deliberately, after the Giskard/RAGAS dependency issues earlier - hand-building also just teaches the mechanics better.
+
+Policy given to the agent: refunds qualify only if purchased within 30 days AND not final sale. Tested against 3 fake orders: #1234 (10 days, eligible), #5678 (45 days, too old), #9999 (5 days, but final sale).
+
+### Real bug 1 - malformed tool calls
+On some fresh conversations, the small model didn't return simple arguments like `{'order_id': '1234'}` - it echoed back the tool's entire JSON schema instead, with the real value buried inside `properties`. Added a validation check (`validate_args`) that catches this and safely refuses to execute rather than guessing. This is a genuine small-model tool-calling reliability problem - one of the failure types Phase 5 formalizes.
+
+### Real bug 2 - a real policy violation (the more serious one)
+Order #5678 (45 days old) should NOT qualify - the policy says 30 days max. The tool call worked correctly this time, and the agent got back `{'days_since_purchase': 45, 'final_sale': False}` - the data it needed to catch its own mistake was right there. **It still processed the refund anyway**, ignoring its own explicit instructions, and told the customer everything was fine.
+
+**Why this bug matters more than bug 1:** bug 1 is a plumbing failure (bad formatting) - mechanically easy to catch, which the validation check just proved. Bug 2 is a *reasoning* failure - a real, consequential action taken against explicit policy, with a final answer that sounds completely normal. Checking only the final reply would never catch this. This is exactly why Phase 5's trajectory evaluation exists - checking the *path*, not just the destination.
+
+### How to re-run this yourself later
+From `c:\Users\User\Desktop\Gen-Ai-Testing\`:
+```
+python shoe_store_agent.py
+```
+
+---
+
+*(Next entry lands here once Phase 5, Week 15 begins.)*

@@ -81,19 +81,19 @@ Test retrieval-augmented pipelines stage by stage — most "AI chatbot" features
 Learn how agents plan, call tools, and remember — you can't test a structure you don't understand.
 
 **Week 11**
-- [ ] Learn what separates an "agent" from a chatbot: planning, autonomy, multi-step reasoning
-- [ ] Learn the ReAct (reason + act) loop pattern
+- [x] Learn what separates an "agent" from a chatbot: planning, autonomy, multi-step reasoning
+- [x] Learn the ReAct (reason + act) loop pattern
 
 **Week 12**
-- [ ] Learn tool/function calling mechanics — how an agent picks a tool and its arguments
-- [ ] Learn memory types: short-term, long-term (vector store), episodic
+- [x] Learn tool/function calling mechanics — how an agent picks a tool and its arguments
+- [x] Learn memory types: short-term, long-term (vector store), episodic
 
 **Week 13**
-- [ ] Learn multi-agent orchestration and delegation patterns
-- [ ] Learn the basics of MCP (Model Context Protocol)
+- [x] Learn multi-agent orchestration and delegation patterns
+- [x] Learn the basics of MCP (Model Context Protocol)
 
 **Week 14**
-- [ ] **Project 2:** build a simple 2–3 tool agent with LangGraph or CrewAI
+- [x] **Project 2:** build a simple 2–3 tool agent — built from scratch (no framework) using Ollama's native tool calling, to keep the ReAct loop fully visible; found 2 real bugs (malformed tool calls, and a policy-violation reasoning failure)
 
 ---
 
