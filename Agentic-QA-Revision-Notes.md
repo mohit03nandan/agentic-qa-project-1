@@ -563,4 +563,31 @@ python test_agent_suite.py
 
 ---
 
-*(Next entry lands here once Phase 6, Week 21 begins.)*
+## Phase 6, Week 21 — Load/Performance Testing, and Cost Regression
+
+### Load/performance testing
+Checking how the system behaves not just once, but under real usage - many requests at once, or a steady stream over time. Our own 3.9s/20.0s/7.1s timing spread from Project 3 was a small taste of this - performance testing measures that pattern properly and checks it doesn't get worse under real load.
+
+### Latency percentiles
+Averaging response times can hide problems. If 9 requests take 5s and 1 takes 60s, the average looks okay-ish, but that one slow request means a real user had a terrible wait. Percentiles ask "what's the worst time 95% of people experience?" instead of just averaging.
+
+### Streaming and rate limits (quick notes)
+- **Streaming** - the AI sends words as they're generated (like watching someone type live) instead of waiting for the whole answer. Test that it doesn't stutter or break partway through.
+- **Rate limits** - providers cap requests per minute. Test what happens when the app hits that cap - graceful message, or a crash?
+
+### Cost/token-usage regression testing
+Track token usage (cost) over time, and treat a sudden jump as a bug even if the answer is still correct. Example: a system prompt accidentally triples in length, or a bug makes the agent loop 5 times instead of 2 - the app still "works" but now costs 3-5x more per request. A cost regression test catches that automatically, same as catching a wrong answer.
+
+---
+
+## Phase 6, Week 22 — A/B Testing, and Drift Detection (Roadmap Complete)
+
+### A/B testing
+Trying two versions side by side (two prompts, or two models) with real usage, and comparing which actually performs better - instead of guessing. Example: run the refund agent with the current prompt vs. a rewritten one, and compare which has fewer policy violations like the one found in Project 3.
+
+### Drift detection
+A model's behavior can quietly change over time - the provider updates it, or real customers start asking new kinds of questions the tests never covered. The code doesn't change, but the app slowly gets worse anyway. Production monitoring means watching real usage *after launch*, not just testing once before it, so the decline gets caught instead of showing up as angry customers.
+
+---
+
+**The full 22-week roadmap is complete.** Phases 0-6 done, three portfolio projects built and pushed to https://github.com/mohit03nandan/agentic-qa-project-1, and several genuinely real bugs found along the way (prompt injection leak, RAG retrieval miss, a judge that hallucinated a passing grade, a policy-violation agent bug, and a self-contradicting adversarial failure). Remaining ongoing work lives in the "Proof of Work" section of the roadmap - case studies, an open-source contribution, and interview practice.

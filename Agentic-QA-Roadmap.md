@@ -132,12 +132,14 @@ The specialization itself: trajectory evaluation, tool-call correctness, and adv
 Round out with the concerns that only show up once an agent is live: cost, latency, drift.
 
 **Week 21**
-- [ ] Learn load/performance testing for LLM APIs — latency percentiles, streaming, rate limits
-- [ ] Learn cost/token-usage regression testing
+- [x] Learn load/performance testing for LLM APIs — latency percentiles, streaming, rate limits
+- [x] Learn cost/token-usage regression testing
 
 **Week 22**
-- [ ] Learn A/B testing across prompts and model versions
-- [ ] Learn production monitoring and behavioral drift detection
+- [x] Learn A/B testing across prompts and model versions
+- [x] Learn production monitoring and behavioral drift detection
+
+**ROADMAP COMPLETE** — Phases 0–6 done, three portfolio projects built and pushed to GitHub.
 
 ---
 
@@ -145,7 +147,7 @@ Round out with the concerns that only show up once an agent is live: cost, laten
 
 What actually gets you hired. Don't wait until week 22 to start these.
 
-- [ ] Keep a public GitHub repo of your agent-testing framework, updated as you learn
+- [x] Keep a public GitHub repo of your agent-testing framework, updated as you learn &rarr; https://github.com/mohit03nandan/agentic-qa-project-1
 - [ ] Write 2–3 short case studies on defects you found through red-teaming
 - [ ] Contribute a test case or issue to LangGraph or CrewAI
 - [ ] Practice explaining the OWASP LLM Top 10 and trajectory evaluation out loud, unscripted
