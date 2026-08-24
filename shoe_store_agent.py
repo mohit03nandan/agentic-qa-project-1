@@ -11,6 +11,7 @@ How to run:
 """
 
 import json
+import time
 
 import ollama
 
@@ -103,12 +104,25 @@ def validate_args(args: dict) -> bool:
     )
 
 
-def run_agent(customer_message: str):
-    print(f"\n{'=' * 70}\nCUSTOMER: {customer_message}\n{'=' * 70}")
+def run_agent(customer_message: str, verbose: bool = True) -> dict:
+    """Runs the agent and returns a structured trace, so a test script can
+    check exactly what happened (tools called, order, args, final answer)
+    instead of just reading printed text."""
+    if verbose:
+        print(f"\n{'=' * 70}\nCUSTOMER: {customer_message}\n{'=' * 70}")
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": customer_message},
     ]
+    trace = {
+        "customer_message": customer_message,
+        "tool_calls": [],  # list of {"name", "args", "valid", "observation"}
+        "final_answer": None,
+        "stopped_reason": None,
+        "elapsed_seconds": None,
+    }
+    start = time.perf_counter()
 
     for step in range(1, MAX_STEPS + 1):
         response = ollama.chat(model=MODEL, messages=messages, tools=TOOLS)
@@ -117,25 +131,36 @@ def run_agent(customer_message: str):
 
         tool_calls = msg.get("tool_calls")
         if not tool_calls:
-            print(f"\nFINAL ANSWER (after {step} step(s)): {msg['content']}")
-            return
+            if verbose:
+                print(f"\nFINAL ANSWER (after {step} step(s)): {msg['content']}")
+            trace["final_answer"] = msg["content"]
+            trace["stopped_reason"] = "final_answer"
+            trace["elapsed_seconds"] = time.perf_counter() - start
+            return trace
 
         for call in tool_calls:
             name = call["function"]["name"]
             args = call["function"]["arguments"]
-            print(f"\nSTEP {step} - ACT: {name}({args})")
+            if verbose:
+                print(f"\nSTEP {step} - ACT: {name}({args})")
 
             if not validate_args(args):
-                print(
-                    f"         BUG FOUND: malformed tool-call arguments - expected a flat "
-                    f"{{'order_id': '...'}}, got {args!r} instead. Refusing to execute this "
-                    f"as-is (a real system should reject this too, not guess)."
-                )
-                print(f"\nSTOPPED: invalid tool call at step {step}.")
-                return
+                if verbose:
+                    print(
+                        f"         BUG FOUND: malformed tool-call arguments - expected a flat "
+                        f"{{'order_id': '...'}}, got {args!r} instead. Refusing to execute this "
+                        f"as-is (a real system should reject this too, not guess)."
+                    )
+                    print(f"\nSTOPPED: invalid tool call at step {step}.")
+                trace["tool_calls"].append({"name": name, "args": args, "valid": False, "observation": None})
+                trace["stopped_reason"] = "invalid_args"
+                trace["elapsed_seconds"] = time.perf_counter() - start
+                return trace
 
             result = DISPATCH[name](**args)
-            print(f"         OBSERVE: {result}")
+            if verbose:
+                print(f"         OBSERVE: {result}")
+            trace["tool_calls"].append({"name": name, "args": args, "valid": True, "observation": result})
 
             messages.append(
                 {
@@ -144,7 +169,11 @@ def run_agent(customer_message: str):
                 }
             )
 
-    print(f"\nSTOPPED: hit the {MAX_STEPS}-step safety cap without a final answer.")
+    if verbose:
+        print(f"\nSTOPPED: hit the {MAX_STEPS}-step safety cap without a final answer.")
+    trace["stopped_reason"] = "max_steps"
+    trace["elapsed_seconds"] = time.perf_counter() - start
+    return trace
 
 
 if __name__ == "__main__":

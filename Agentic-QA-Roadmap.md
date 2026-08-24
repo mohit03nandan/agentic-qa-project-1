@@ -102,28 +102,28 @@ Learn how agents plan, call tools, and remember — you can't test a structure y
 The specialization itself: trajectory evaluation, tool-call correctness, and adversarial red-teaming of autonomous systems.
 
 **Week 15**
-- [ ] Learn trajectory/path evaluation — judging the steps, not just the final answer
-- [ ] Learn tool-selection correctness testing
+- [x] Learn trajectory/path evaluation — judging the steps, not just the final answer
+- [x] Learn tool-selection correctness testing
 
 **Week 16**
-- [ ] Learn task completion / goal success rate measurement across repeated runs
-- [ ] Learn multi-turn coherence and state-tracking testing
+- [x] Learn task completion / goal success rate measurement across repeated runs
+- [x] Learn multi-turn coherence and state-tracking testing
 
 **Week 17**
-- [ ] Learn loop/deadlock detection and cost-per-task tracking
-- [ ] Wire up LangSmith tracing on your Project 2 agent
+- [x] Learn loop/deadlock detection and cost-per-task tracking
+- [x] Tracing on Project 2 agent — already have full step-by-step ACT/OBSERVE prints in `shoe_store_agent.py` (LangSmith skipped, same reasoning as Week 10: avoids another cloud account/dependency)
 
 **Week 18**
-- [ ] Study the OWASP Top 10 for LLM Applications until you can recite it
-- [ ] Learn direct and indirect prompt injection techniques
+- [x] Study the OWASP Top 10 for LLM Applications until you can recite it
+- [x] Learn direct and indirect prompt injection techniques
 
 **Week 19**
-- [ ] Learn jailbreak probing methodology
-- [ ] Learn excessive-agency and data-exfiltration risks
-- [ ] Learn structured red-teaming methodology
+- [x] Learn jailbreak probing methodology
+- [x] Learn excessive-agency and data-exfiltration risks
+- [x] Learn structured red-teaming methodology
 
 **Week 20**
-- [ ] **Project 3 (portfolio piece):** full agent test suite — functional, trajectory, tool-call accuracy, adversarial resistance, cost/latency, regression
+- [x] **Project 3 (portfolio piece):** full agent test suite — functional, trajectory, tool-call accuracy, adversarial resistance, cost/latency, regression (1/5 passed — real findings, including a self-contradicting adversarial failure)
 
 ---
 
