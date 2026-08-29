@@ -359,4 +359,72 @@ Because RAG-based answers are context-aware and precise (grounded in the actual 
 
 ---
 
+## Section 5.1 — Moving from Manual to Automated UI Testing with Gen AI
+
+### Section title: "How to perform automated UI testing with the help of Gen AI?"
+A new section divider, moving on from Section 4's manual-testing focus into automated UI testing — this matches the tool collage teased back on the Section 4.1 title slide (Selenium, Cypress, Playwright icons), now being addressed directly.
+
+### LLMs already understand the popular automation frameworks
+The course states that Gen AI can help with automated UI testing just as naturally as it helped with manual testing, because LLMs already "understand" (have been trained on lots of code and docs from) the popular automation frameworks:
+- **Cypress**
+- **Playwright**
+- **Selenium**
+- **TestCafe**
+
+It also notes LLMs can help refactor existing test code, not just generate new tests.
+
+*In plain terms: this isn't a new capability so much as a reminder — the same "write me a Selenium test" trick already demonstrated back in Sections 2.2 and 3.2 works because these frameworks are extremely well-documented and widely used in public code, so the model has seen tons of real examples of each one during training. TestCafe is the one new name here: it's another end-to-end web testing framework (Node.js-based), in the same space as Cypress and Playwright, but notable for not needing Selenium/WebDriver under the hood at all.*
+
+*Touchpoint — "refactor" here means: take test code that already works and clean it up (better naming, removing duplication, applying patterns like Page Object) without changing its behavior. That's a distinct, and arguably more immediately useful, skill from "generate a brand-new test from scratch."*
+
+### "Not only that" — AI-powered coding tools built into the editor
+The course adds a second category: AI-powered development tools that live inside your IDE, rather than a separate chat window:
+- **GitHub Copilot**
+- **Tabnine**
+- **Amazon CodeWhisperer**
+- **Google Project IDX**
+
+These are described as able to refactor, explain, document, and even write unit-test code.
+
+*In plain terms: this is a genuinely different way of using Gen AI than everything shown so far in the course. ChatGPT/Claude/GPT4All are separate chat windows — you describe what you want, copy the answer, and paste it into your code. Tools like GitHub Copilot instead sit directly inside your code editor and suggest code as you type, right in context, without the copy-paste step. It's the same underlying idea (an LLM trained on code) wrapped in a much more integrated, faster workflow for day-to-day coding.*
+
+*Touchpoint: "explain" and "document" are worth calling out specifically for testers inheriting someone else's automation suite — pointing one of these tools at an unfamiliar test file and asking it to explain what the code does, or to generate missing comments/docs, is often a faster first step than reading it line-by-line cold.*
+
+---
+
+## Section 5.2 — ZeroStep: AI Baked Directly into Playwright
+
+### What ZeroStep is
+The instructor visits ZeroStep's website — an npm package (`npm i @zerostep/playwright -D`) that adds an `ai()` function directly into Playwright test code, backed by GPT-3.5/GPT-4. Instead of writing a CSS selector or XPath to locate an element, you write a plain-English instruction — the example shown is `ai("Fill out the form with realistic values")` on a real form (First Name, Last Name, Street Address, City, State) — and ZeroStep's AI figures out at runtime what actions to actually take to satisfy that instruction.
+
+*In plain terms: this is the most concrete example yet of the "LLMs understand Playwright" point from Section 5.1 — not copy-pasting AI-generated code from a chat window, but a real library that plugs the AI directly into your existing Playwright test, one line at a time if you want. The tagline "So long, selectors" is the pitch: instead of the test breaking because a `button.class-xyz` selector changed, you just describe *what* the test should do, and the AI works out *how* to do it against whatever the page currently looks like.*
+
+*Touchpoint: this is the same "self-healing"/"smart locator" idea flagged all the way back in Section 2.2's tool roundup (Testim, Applitools, etc.) — except here it's not a separate paid platform, it's a small library bolted onto the same open-source Playwright framework you're probably already using. The site's other selling point, "without changing your development workflow," means you can adopt this gradually — sprinkle `ai()` into just the flakiest parts of a suite rather than rewriting everything at once.*
+
+*Touchpoint: worth remembering as a trade-off to watch for — a locator is deterministic (same input, same result every time); an AI figuring out "what to click" from an instruction is not always guaranteed to be deterministic in the same way. Good to keep in mind for later when the course covers testing AI-driven systems themselves.*
+
+---
+
+## Section 5.3 — Auto Playwright: Another Take on AI-Driven Playwright Tests
+
+### Setting it up
+The instructor follows the GitHub README for **Auto Playwright**, an open-source package (TypeScript, 6 contributors, actively released) that adds a similar AI-powered `auto()` function to Playwright. Setup is three steps:
+1. Install it: `npm install auto-playwright -D`
+2. Export your own OpenAI API key as an environment variable (or put it in a `.env` file): `export OPENAI_API_KEY='sk-...'`
+3. Import `auto` from `auto-playwright` alongside the normal Playwright `test`/`expect`, and call it inside a test.
+
+*In plain terms: this is the same overall idea as ZeroStep (Section 5.2) — plain-English instructions instead of brittle selectors, built directly into Playwright — but a different, independent open-source project, and one that talks straight to your own OpenAI account rather than a separate hosted service. Practically, that means you need to hold and pay for your own OpenAI API key for this one to work.*
+
+*Touchpoint: exporting the API key as an environment variable (rather than pasting it directly into the test code) is standard security practice — it keeps the secret out of the source code and out of git history. Worth remembering any time a tool needs a credential like this.*
+
+### What the `auto()` function can actually do
+The README example shows `auto()` handling three distinct kinds of tasks in one small test:
+1. **Query data** — `auto("get the header text", { page, test })` reads plain-text content off the page.
+2. **Perform an action** — `` auto(`Type "${headerText}" in the search box`, { page, test}) `` finds the right input and types into it.
+3. **Assert state** — `` auto(`Is the contents of the search box equal to "${headerText}"`, { page, test }) `` returns a true/false answer, which then gets checked with a normal `expect(...).toBe(true)`.
+
+*In plain terms: this is a nice, clear breakdown of what "AI in your test" actually means in practice — it's not just one trick (finding elements), it covers three separate jobs a normal test does anyway: reading data off the page, doing something with it, and checking the result. Here all three are driven by plain-English instructions instead of hand-written Playwright locator/action code, and the very last step still ends in an ordinary Playwright/Jest-style `expect(...)` assertion — so the AI does the fuzzy "find and interact" work, but the pass/fail verdict is still a normal, deterministic check.*
+
+---
+
 *(Next section's notes get appended below as more screenshots come in.)*
