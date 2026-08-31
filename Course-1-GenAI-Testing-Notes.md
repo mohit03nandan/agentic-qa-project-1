@@ -427,4 +427,58 @@ The README example shows `auto()` handling three distinct kinds of tasks in one 
 
 ---
 
+## Section 6.1 — testRigor: A Full Plain-English Test Automation Platform
+
+### What testRigor is
+The instructor lands on testRigor's site, marketed as "the #1 Generative AI-based Test Automation Tool." Instead of writing code (or even bolting AI onto existing code like Sections 5.2–5.3), you write test steps in plain English and testRigor runs them directly. The example given: a high-level instruction like `purchase a Kindle` gets automatically broken down into a concrete sequence of steps:
+```
+enter "Kindle" into "Search"
+press enter
+click "Paperwhite"
+click "Add to cart"
+```
+You can also review, correct, or expand these generated steps yourself using testRigor's own set of supported plain-English commands.
+
+*In plain terms: this is a step up in scope from ZeroStep/Auto Playwright — those two added an AI-powered function *inside* a Playwright test you still write and own; testRigor is a whole standalone platform where the plain-English instructions themselves *are* the entire test, with no separate framework code underneath that you touch. Notice, too, that the commands it generates ("enter X into Y", "click Z") aren't totally free-form AI improvisation — they come from a fixed vocabulary of supported commands, which is presumably what makes tests written this way reliable enough to actually run in CI, rather than re-interpreted by an LLM fresh every single run.*
+
+*Touchpoint: turning one high-level goal ("purchase a Kindle") into an ordered list of concrete sub-steps is the same "task decomposition" idea that shows up in agentic AI generally — breaking a big goal down into smaller actions an agent can execute one at a time.*
+
+### Notable mention: hooking into Claude Code via MCP and Skills
+The page also mentions you can "generate tests directly in testRigor or through Claude Code using MCP and Skills," and separately test AI features like summaries, chatbots, charts, and diagrams using "AI testing."
+
+*In plain terms: this is worth pausing on, since it's directly relevant to how these very notes are being taken — MCP (Model Context Protocol) is the standard that lets an AI coding assistant like Claude Code connect to and control external tools (here, testRigor), and "Skills" are packaged, reusable instruction sets Claude Code can load for a specific workflow. So testRigor isn't just a plain-English tool by itself — it's also positioning itself as something an AI coding agent can drive on your behalf. That's a concrete real-world example of the "agentic AI tester" direction from the wider learning roadmap, not just a course concept.*
+
+*Touchpoint — "AI testing" (of chatbots/summaries/charts): this is a different kind of testing than clicking buttons on a page — it's checking whether AI-*generated content* is correct or appropriate (e.g., did the chatbot's answer make sense, does the auto-generated chart match the data). That's closer to evaluating an LLM's output quality than to classic UI automation, and it's a preview of the kind of "LLM-as-judge" / output-evaluation topics that come up later in more advanced testing work.*
+
+### The actual testRigor dashboard
+The right-hand screenshot shows a real testRigor account: a sidebar with Test Suites, Test Cases, Behavior-Driven Test Creation, Errors, Reports, Tree View, All Runs, Reusable Rules, Test Data, Default Values for Discovery, CI/CD Integration, and Settings — plus a specific test case, "Add To Cart Test," being edited with two custom steps written in the same simple format:
+```
+click "Add to Cart"
+check that page contains "Added to"
+```
+
+*In plain terms: this is the same plain-English idea shown concretely inside the actual product — one line per action, in an `action "value"` shape, and a `check that ... contains ...` line standing in for an assertion. The sidebar (Test Suites, CI/CD Integration, Reports, etc.) shows this is a full test-management platform, not just a novelty chat trick — it covers organizing tests, running them, and reporting results, the same responsibilities a "traditional" automation framework has.*
+
+---
+
+## Section 6.2 — testRigor on a Real Production Site: Booking a Flight on Cleartrip
+
+### The test case: searching flights on a real, live website
+The instructor builds a second testRigor test case, named `FlightBooking`, this time against **Cleartrip** — a genuine, live flight-booking website, not a small practice/demo app. The plain-English steps entered are:
+```
+click "Flights"
+enter "chennai" in "From"
+click "Chennai, IN - Chennai Airport (MAA)"
+enter "mumbai" in "To"
+```
+On the right, Cleartrip's actual search form is shown mid-interaction: typing "chennai" into the "From" field pops open a live autocomplete dropdown of matching airports, and the test's next step clicks the specific suggestion text.
+
+*In plain terms: this pushes the Section 6.1 idea from a toy example into a genuinely complex, real-world site — one with dynamic, live-loading autocomplete dropdowns, not just static form fields. It's a stronger proof point for testRigor's pitch: the instructions read exactly like how a human would describe doing this task out loud ("click Flights, type chennai in From, pick the Chennai airport option, type mumbai in To").*
+
+*Touchpoint: autocomplete/typeahead dropdowns are one of the classically painful cases for traditional Selenium-style automation — the suggestion elements don't exist in the DOM until you start typing, and their identifiers are often auto-generated and unstable between runs. Being able to just write `click "Chennai, IN - Chennai Airport (MAA)"` and have it reliably find that freshly-rendered suggestion is a concrete, real example of the "resilient to UI change" claim from Section 6.1 — it worked without needing to know any CSS class or XPath for that dropdown item.*
+
+*Touchpoint: browser DevTools (the Elements panel) is visible open on the far right in this screenshot — a reminder that even though the automation is written in plain English, it's still ultimately clicking real DOM elements underneath. testRigor's magic is in matching your plain-English text against what's actually rendered on the page (visible labels, accessible text) — it isn't bypassing the DOM, it's just sparing you from having to write the selector yourself.*
+
+---
+
 *(Next section's notes get appended below as more screenshots come in.)*
