@@ -548,4 +548,84 @@ Risk to people goes up as autonomy goes up — the more control you hand to the 
 
 ---
 
+## Section 7.1 — What Is MCP? (ExecuteAutomation slides)
+
+These slides carry the ExecuteAutomation branding — the same people behind the `eaapp.somee.com` practice site used throughout this course — now explaining **MCP (Model Context Protocol)**, which was already name-dropped back in Section 6.1 (testRigor's "generate tests through Claude Code using MCP and Skills").
+
+### What MCP is
+MCP is described as a "newly open-sourced standard designed to help AI assistants work more effectively by connecting them to the systems and tools where relevant data resides."
+
+*In plain terms: MCP is a standard way for an AI assistant to plug into outside systems — your files, a database, GitHub, Slack — instead of every company inventing its own one-off way to connect. Think of it like USB for AI: before USB, every device needed its own custom port and cable; USB made "one standard plug" that works everywhere. MCP is aiming to be that standard plug for connecting an LLM to data and tools.*
+
+### The problem MCP solves
+Two problems are named directly:
+1. Even the most advanced AI models can't access real-time or domain-specific data on their own, because that data lives in separate, disconnected ("isolated and fragmented") systems.
+2. Before MCP, connecting an AI to each new data source meant building a custom, one-off connector every single time — which doesn't scale as the number of tools grows.
+
+*In plain terms: this is exactly the problem hit back in Section 4.2, where plain ChatGPT couldn't access `eaapp.somee.com` at all and needed page source manually pasted in. Multiply that "AI can't reach outside its own chat window" limitation across every tool a company might want an AI to use (GitHub, a database, internal docs), and you'd traditionally need a separate bespoke integration for each one. MCP's pitch is: build the connector once per tool (as an "MCP server"), and any MCP-compatible AI assistant can use it — no bespoke wiring per AI app.*
+
+### How MCP works: Server and Client
+MCP has two halves:
+1. **MCP Server** — the connector for a specific system/tool (e.g. GitHub, a local folder, Slack, Google Drive, a browser-automation tool like Puppeteer).
+2. **MCP Client** — lives inside the AI assistant (the slide's example is Claude), and talks to whichever MCP Servers are available, over the "MCP protocol."
+
+The diagram shows one AI assistant connecting through the MCP protocol out to several different tools at once, each gaining "local access" to that specific system.
+
+*In plain terms: this is not a hypothetical for this session — it's literally what just happened a few messages ago. When researching smolagents and browser-use, an MCP server called **Context7** was used to fetch their current, real documentation, rather than relying only on older training knowledge. That's the MCP Client (built into this environment) talking through the MCP protocol to an MCP Server (Context7, which knows how to fetch library docs) — the exact same pattern in this diagram, just with "look up library documentation" as the connected tool instead of GitHub/Slack/Drive.*
+
+*Touchpoint: Puppeteer showing up in the diagram's list of connectable tools is a nice callback — it's a browser-automation library in the same space as Playwright/Selenium (Section 5.1) and what browser-use (just explored hands-on) is built on. It shows MCP isn't limited to "read-only data lookup" tools — it can also expose action-taking tools like browser control, in the same "hand the AI real hands and eyes" sense discussed with agents generally.*
+
+### The bottom line
+MCP is summarized as making it easier for AI systems to keep context while working across multiple tools/datasets (improving how accurate and relevant their answers are), and as lowering the barrier to integrating AI into real applications — while keeping things transparent and interoperable (i.e., not locked to one vendor's proprietary way of connecting).
+
+*In plain terms: "maintain context across multiple tools" is the important phrase — it's not just about fetching one piece of data once, it's about an AI assistant using several connected tools together in one coherent task, remembering what it learned from one tool while using the next. That's the same "multi-step agent" idea from Section 6.3's autonomy table, but specifically about *how* an agent reaches outside data/tools in a standardized way, rather than the autonomy-level question of how much it decides on its own.*
+
+---
+
+## Section 7.2 — TestSprite: A Managed AI Testing Agent Platform
+
+### Recap slide: "What is an AI Agent?"
+Before introducing TestSprite, the slide defines an AI agent as "a fully autonomous system that operates independently over extended periods, using various tools to accomplish complex tasks," and says it can **perceive, decide, and act** in an environment based on goals.
+
+*In plain terms — worth flagging directly: this "fully autonomous" phrasing is looser and more marketing-flavoured than Section 6.3's careful breakdown. That deep-dive was explicit that "fully autonomous" (level ★★★★, writing and running its own code with no constraints) is the one level it recommends **against** building, precisely because it removes every human guardrail. Most real tools calling themselves "AI agents" — including TestSprite below — actually sit at the semi-autonomous levels (multi-step agent, with humans still reviewing/approving along the way), not literally "fully autonomous" in that stricter sense. Good habit: whenever marketing copy says "fully autonomous," check what level of human oversight the product *actually* keeps, rather than taking the label at face value.*
+
+### What TestSprite's agents do
+TestSprite's AI agents are described as performing five steps, in sequence:
+1. 🔍 Test Object Inspection
+2. 📝 Generate Test Plan
+3. ✅ Create Test Cases
+4. ▶️ Execute Test Case
+5. 📊 Analyse Test Results
+
+*In plain terms: this is basically the entire manual-testing workflow covered across Section 4 (test scenario → test case with data → execution → results) bundled into one automated pipeline, plus a first step ("Test Object Inspection") that presumably plays the role NotebookLM/RAG played back in Sections 4.5–4.6 — actually looking at the real application first, rather than guessing, before writing any test plan.*
+
+### What kinds of tests TestSprite can run
+Four categories are listed:
+1. 🧪 API Testing
+2. 🖥️ UI Testing
+3. 📦 Data Testing
+4. 🤖 AI Agent & Model Testing
+
+*In plain terms: the first three are the traditional test-automation surface (API/UI/data — matching Section 1's original applications list). The fourth, "AI Agent & Model Testing," is the newer category flagged back in Section 6.3's "AI testing" touchpoint — testing *AI-generated behavior itself* (does a chatbot's answer make sense, is an agent's decision correct), not just clicking buttons on a page.*
+
+### Other features
+- **Scheduler mode** — tests can run automatically on a schedule, no manual trigger needed.
+- **PDF reports** — detailed, analyzed pass/fail results delivered as a report.
+- **Failure logs** — execution details alongside any logged failures, for debugging.
+
+*In plain terms: this is standard "test management platform" territory (scheduling, reporting) layered on top of the AI-generation piece — the same pattern already seen with testRigor's dashboard (Section 6.1): the AI writes/runs the tests, but the surrounding product still needs ordinary CI-style scheduling and reporting to be usable on a real team.*
+
+### General Q&A about TestSprite
+- **Runs in CI/CD?** Yes.
+- **Can it test a local (not-yet-deployed) application?** Yes, via **tunneling**.
+- **Is a human kept in the loop during test execution?** Yes, via an "Agent Chat."
+- **Security?** SOC 2 certified.
+
+*In plain terms:*
+- *Tunneling means exposing your `localhost` app to TestSprite's cloud servers through a secure temporary connection (tools like ngrok do this) — necessary because TestSprite runs its agents in the cloud, but your app-in-development usually only runs on your own machine.*
+- *"Human in the loop via Agent Chat" is the important safety detail connecting straight back to the Section 6.3 discussion: this is a semi-autonomous design choice — a human can still watch/intervene through a chat interface while the agent works, rather than the agent running completely unsupervised. It's a concrete example of keeping meaningful human control even while automating most of the pipeline.*
+- *SOC 2 is a real, independently-audited security/compliance certification (covering how a company handles and protects customer data) — relevant here since TestSprite's cloud agents would be touching your application and possibly its test data, which is exactly the "sensitive data leaving your machine" concern raised all the way back in Section 3.1's case for local LLMs.*
+
+---
+
 *(Next section's notes get appended below as more screenshots come in.)*
