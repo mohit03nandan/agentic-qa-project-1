@@ -259,4 +259,131 @@ Positioned as an enterprise-grade generative-AI evaluation *and* observability p
 
 ---
 
+## Section 2.1 — Running Local LLMs with Ollama
+
+A new section of the course begins here, shifting from cloud-hosted models (OpenAI, Anthropic, Google) to running models **locally, for free**, using **Ollama** — available for macOS, Linux, and Windows from ollama.com.
+
+### Why this matters, cost-wise
+The lecture contrasts this directly against OpenAI's API pricing page — every model call to a hosted API (OpenAI, Anthropic, Google Gemini) costs money per million tokens, for both input and output. Running a model locally through Ollama skips that entirely — no sign-up, no per-token billing, no API key needed.
+
+*In plain terms: this matters even more for *evaluation* work specifically (the whole subject of this course) than for casual chatting — evaluating a model properly means running it against many test cases, often repeatedly as you iterate on prompts (exactly what Section 1.4's Workbench demo showed). That's a lot of API calls adding up fast if each one costs money; running locally makes heavy, repeated evaluation runs effectively free.*
+
+### What's on Ollama's model library
+Ollama's models page lists essentially every popular open model — DeepSeek R1, Llama 3.2, Mistral, Qwen 2.5, Phi-4, and more — each available at different parameter sizes. Models can also be filtered by *purpose*: general chat, **embedding** models, **vision** models, and — notably — models with **tool support** (needed for building agents), e.g. Llama 3.3 70B is flagged as tool-capable.
+
+*In plain terms: this is the exact same tool already used hands-on earlier in this session — every one of the `smolagents` and `shoe_store_agent.py`/`rag_app.py` scripts in this repo already runs on Ollama, using `llama3.2:1b`. This lecture is really just formalizing something already set up and working in this project. The "tool support" filter is worth remembering for later: not every local model is built to reliably call tools/functions — that's exactly the gap that made `llama3.2:1b` shaky in the earlier smolagents dry-run (Course 1 discussion), so a model explicitly tagged "tool support" would likely behave more reliably for agentic tasks.*
+
+### Setup note
+The instructor has Ollama already installed and asks students to install it before the next lecture, since it'll be used starting there.
+
+*In plain terms: nothing to do here — Ollama's already installed and working in this environment (confirmed earlier: `ollama list` shows `llama3.2:1b` and `nomic-embed-text` already pulled).*
+
+---
+
+## Section 2.2 — Choosing a Model Size: Parameters, Hardware, and Trade-offs
+
+### Bigger parameter count = bigger file, more hardware needed
+On Ollama's model page, most models offer a dropdown of parameter sizes — e.g. DeepSeek R1 ranges from 7B all the way up to 671B. Size scales fast: a 7B model is about 4.7GB, while the 671B version needs roughly 404GB of storage. More parameters means a more complex transformer model, which needs more processing power (CPU/GPU/RAM) and heavier quantization support to actually run.
+
+*In plain terms: "parameters" are still the model's learned settings (first mentioned back in Course 1, Section 3.3, discussing Llama 3.2's 1B/3B vs 11B/90B lineup) — this lecture just puts real numbers on what that size difference costs in disk space and hardware.*
+
+### Head count and head count (KV) — model internals shown per size
+Each model listing also shows its **quantization version** and **head count** (and a separate "head count KV") — roughly, how many parallel "attention heads" the model uses internally. These numbers scale with model size: a 7B model might show ~28 head count, while DeepSeek R1's 671B version jumps to 128 head count and 128 head count KV.
+
+*In plain terms: "heads" here is the exact same concept as the attention visualization seen all the way back in Course 1, Section 2.1 (the BertViz-style grid of Layers × Heads) — this lecture is showing that real number as a concrete spec you can check per model, not just an abstract diagram. More heads generally means the model can track more distinct kinds of relationships between words at once — part of why bigger models are more capable, and heavier to run.*
+
+### Practical hardware guidance
+Realistically, most machines can't handle the largest models (671B, 70B, even 32B). The lecture suggests capping expectations around **8B–14B** parameters for typical hardware. The instructor's own machine (Apple M1 Max, 64GB RAM) handles inference well; a typical Windows machine might be limited closer to 8B. For anyone wanting to run bigger local models, a dedicated Nvidia GPU helps — an RTX 3080 (or 2080) is a reasonable choice; a 4090 works but is expensive.
+
+**The trade-off to remember:** smaller models are what's actually runnable on modest hardware, but they give less predictable/reliable output than larger ones.
+
+*In plain terms — an honest, useful connection to this session's own earlier work: every script already built in this repo (`shoe_store_agent.py`, `rag_app.py`, and all the `smol_agent_*.py` scripts) runs on `llama3.2:1b` — a **1-billion-parameter** model, smaller than even the 7B–8B floor this lecture recommends as a practical minimum. That directly explains why the earlier smolagents custom-tool dry-run struggled (the model kept trying to write its own `import requests` instead of reliably using the given tool) — it wasn't a setup bug, it's exactly the "smaller = less predictable/reliable tool-use" trade-off this lecture is describing, now with a concrete real-world example already lived through in this same session.*
+
+### Architecture isn't just about size
+Comparing two different model families at similar/larger sizes shows the internal architecture isn't just a bigger version of the same thing: Llama 3.1's 405B version (243GB) shows a head count of 128 but a head count KV of only 8 — quite different from DeepSeek R1's 671B version (128 and 128). Different model families make different architectural trade-offs, not just "more of the same" as they scale up.
+
+---
+
+## Section 2.3 — Hands-On: Pulling and Running Models via the Ollama CLI, and Seeing Model Size Actually Matter
+
+### The basic commands
+- `ollama list` — shows every model already downloaded on the machine.
+- `ollama run <model>:<size>` — pulls the model first if it isn't already downloaded (the lecture compares this directly to `docker pull` from Docker Hub — same idea, downloading an "image" for a model instead of a container), then drops you into an interactive prompt to chat with it, just like ChatGPT's interface.
+- `/bye` — quits the current running model's prompt.
+
+### Demo 1: a small, old model gives a completely wrong answer
+Running `ollama run qwen:1.8b` (Qwen 1.5 series, 1.8B parameters, from Alibaba Cloud) and asking a normal question ("how are you doing?") works fine — a generic, reasonable chatbot reply. But asking it to **"write a Selenium C#/.NET code for the google.com website"** produces output that isn't Selenium code at all — it writes unrelated `HttpClient`/SSL-protocol style C# code, nothing like what was asked for.
+
+### Demo 2: a stronger, reasoning-capable model gets it right
+Switching to `ollama run deepseek-r1:8b` (already downloaded) and asking the *exact same* Selenium question produces a completely different result: DeepSeek R1 is a **reasoning model**, so it visibly writes out its "thinking" process first (working through what's being asked) before producing an answer — and this time, the generated Selenium C#/.NET code is actually correct and would run in a real IDE.
+
+*In plain terms — this is Section 2.2's "smaller model = less predictable output" point, now proven with a real side-by-side example instead of just stated as a rule: same exact question, same task type (Selenium code generation, the same kind of task shown working fine with ChatGPT back in Course 1's Sections 2.2 and 3.2) — a small, older 1.8B model produced completely wrong, unusable output, while a larger, newer, reasoning-capable 8B model got it right. This directly explains (and validates) what was already observed hands-on earlier in this very session: the smolagents custom-tool dry-run used `llama3.2:1b` — even smaller than this failing 1.8B example — and it likewise produced unreliable, incorrect behavior (trying to `import requests` instead of using the given tool, then confidently reporting an unverified "200" status). Same underlying cause, two independent real examples of it now.*
+
+*Touchpoint — "reasoning model" and visible "thinking": this is the same idea flagged back in Course 1, Section 1.4 (Claude 3.7 Sonnet's optional "thinking"/reasoning-budget setting in Anthropic's Workbench) — some models are specifically built to work through a problem step-by-step before answering, rather than jumping straight to a response, and that extra step visibly correlates with getting a harder task (like generating correct code) right.*
+
+### The bigger point
+Once a model is downloaded, it runs entirely offline — no internet connection needed at all for inference. But which model you choose clearly matters: a bigger/more capable (or more reasoning-oriented) model gives meaningfully better, more reliable answers than a small one, even for the exact same question.
+
+---
+
+## Section 2.4 — Nicer Chat Interfaces for Local Models: Msty and GPT4All
+
+*(Note: this lecture's captions came through in Portuguese — notes below are translated/cleaned up, not transcribed.)*
+
+After running models via the raw Ollama CLI (Section 2.3), this lecture shows friendlier, ChatGPT-like desktop UIs for the same local models — a quick taste before a later, deeper LangChain-based chatbot-building course.
+
+### Two tools shown
+- **Msty** (msty.app) — a chat interface for local models. Auto-detects every model already installed via Ollama (it picked up the 8B DeepSeek R1 model, plus others already on the machine, without extra setup). Also supports uploading documents, pasting YouTube links, and uploading images (for vision-capable models) to ask questions against them.
+- **GPT4All** (gpt4all.io) — already covered hands-on back in Course 1, Section 3.2. Mentioned again here as supporting the R1 model too, with the same "visible thinking" behavior for reasoning models.
+
+*In plain terms: Msty and GPT4All solve the same problem — a nicer, ChatGPT-style window for models you're already running locally through Ollama, so you don't have to work entirely from a terminal prompt.*
+
+### Demo: proving the answer really is fully local
+In Msty, DeepSeek R1 is selected and asked to convert Selenium code to Playwright for `eaapp.somee.com` — the same practice site used repeatedly throughout Course 1. Before hitting send, **the machine's internet connection is turned off**, to prove the response comes entirely from the local model with nothing sent anywhere. It still works — DeepSeek R1 visibly "thinks" through the problem, then writes out the conversion.
+
+*In plain terms: this is a genuinely convincing, hands-on proof of the exact privacy claim from Course 1, Section 3.1 ("no internet required, nothing leaves your machine") — not just a marketing tagline this time, but demonstrated by literally disabling the network and getting a correct answer anyway.*
+
+### What's next
+The course flags that Ollama will be used again soon, once the course starts working with **LangChain** — matching the "Course 3" pointer already noted in this file's Section 1.2 (the instructor's separate "Build and Test AI Agent, Chatbots and RAGs with Ollama and Local LLM" course, listed in [Udemy-Course-Sequence.md](Udemy-Course-Sequence.md)).
+
+---
+
+## Section 2.5 — Ollama CLI Deep Dive: Managing Models Like Docker Containers
+
+*(Note: this lecture's captions also came through in Portuguese — notes below are translated/cleaned up.)*
+
+### The commands
+- `ollama` (with no arguments) — lists every available subcommand.
+- `ollama rm <model>` — deletes a downloaded model from the machine (confirmed afterward with `ollama list`, which no longer shows it).
+- `ollama show <model>` — prints detailed metadata about a specific model: its architecture, parameter count/support, **context length**, **embedding length**, quantization, and which capabilities (e.g. tool support, vision) it has.
+
+### The mental model: "Ollama is Docker, for LLMs"
+The lecture draws this comparison directly — pulling, running, listing, removing, and inspecting a model with Ollama maps one-to-one onto pulling, running, listing, removing, and inspecting a container with Docker. Same lifecycle, different subject (a model instead of a container image).
+
+*In plain terms: if Docker commands are already familiar, Ollama's command set should feel immediately intuitive — `ollama pull`/`run` ≈ `docker pull`/`run`, `ollama rm` ≈ `docker rm`, `ollama show` ≈ `docker inspect`.*
+
+*Touchpoint — "context length": this is the same setting already used hands-on in this very session — the `smol_agent_*.py` scripts (Course 1) explicitly set `num_ctx=8192` when configuring `llama3.2:1b` through LiteLLM, specifically because Ollama's default context length (2048) is too small for agentic tasks. `ollama show` is exactly where you'd go to check what a given model's default context length actually is, before deciding whether to override it.*
+
+### What's next
+The course is about to start combining Ollama-run local models with **LangChain**, moving from "just chatting with a local model" toward actually building an LLM application on top of one.
+
+---
+
+## Section 2.6 — Ollama as an API Server (Section Wrap-up)
+
+### Running Ollama as a service
+`ollama serve` starts Ollama running as a background API server, listening on **port 11434**. (If it's already running as a persistent service, trying this again just reports the address is already bound — which is the normal, expected state.) This port is what upcoming sections will use to talk to the local model programmatically, instead of typing into a chat prompt by hand.
+
+### Testing the API directly
+- `http://localhost:11434/api/generate` (a simple check) confirms Ollama is running.
+- The real work happens by **POST**ing to that `/api/generate` endpoint with a JSON body containing `model` and `prompt`. Demoed in Postman: `model: llama3.2`, `prompt: "Why is sky blue?"` — sent as a POST request, and a real answer comes back.
+- By default, the response **streams** back one word/token at a time (useful for a live-typing chat UI feel). Setting `"stream": false` in the request body instead returns the whole answer in a single chunk.
+
+*In plain terms — this closes a loop already relevant to this repo's own code: `shoe_store_agent.py`, `rag_app.py`, and `smol_agent_basic.py`/`smol_agent_websearch.py`/`smol_agent_custom_tool.py` (all from earlier in this session) call Ollama through the Python `ollama` library or through LiteLLM's `api_base="http://localhost:11434"`. Both are just convenient wrappers around exactly this same REST API — `ollama.chat(...)` under the hood is making the same kind of POST request to `/api/generate` (or the chat-equivalent endpoint) demonstrated here directly in Postman. Nothing new is being introduced technically; this lecture is just showing the raw HTTP layer that all of that existing code has been quietly sitting on top of the whole time.*
+
+### Section wrap-up
+This closes out the Ollama section. From the next section onward, the course moves to actually *building* something on top of a locally-running LLM — using these APIs together with **LangChain**.
+
+---
+
 *(Next section's notes get appended below as more transcripts/screenshots come in.)*
