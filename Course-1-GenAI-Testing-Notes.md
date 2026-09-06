@@ -628,4 +628,21 @@ Four categories are listed:
 
 ---
 
+## Section 7.3 — TestSprite's Own MCP Server
+
+This slide directly ties Sections 7.1 (What is MCP) and 7.2 (TestSprite) together: TestSprite doesn't just have a web dashboard — it also exposes its own **MCP server**, which addresses four needs:
+1. Running a local application test
+2. Generating reports
+3. Debugging tests and fixing the code
+4. Generating test scripts locally
+
+*In plain terms: this is the concrete, product-level version of the abstract MCP diagram from Section 7.1. Instead of a generic "GitHub/Slack/Drive" example, here TestSprite itself is the MCP Server — meaning an MCP Client (an AI coding assistant like Claude Code, sitting right inside your editor) can talk to TestSprite directly, without you ever opening TestSprite's own web dashboard.*
+
+### Why this matters, compared to Section 7.2's "tunneling" answer
+Section 7.2 asked "can TestSprite test a local application?" and the answer there was tunneling — exposing your `localhost` app to TestSprite's cloud service through a secure tunnel. This MCP server is a second, more integrated way to work with local code: rather than TestSprite's cloud agents reaching *out* to your machine, an AI assistant already running on *your* machine can reach *in* to TestSprite's capabilities (generate scripts, debug, get reports) as part of your normal coding workflow.
+
+*In plain terms: "Generate test scripts locally" and "Debugging tests and fix the code" are the standout items here — this isn't just "run my existing tests from the cloud," it's TestSprite's test-generation and debugging intelligence being made available as tools an AI coding assistant can call directly while you're writing code, the same way `check_url_status` was a tool `smolagents`' `CodeAgent` could call, or the way Context7 was an MCP tool this very session used to fetch library docs. Same underlying pattern (Section 7.1's Server/Client model) — TestSprite is just one more concrete example of a real product implementing it, alongside testRigor's own MCP mention back in Section 6.1.*
+
+---
+
 *(Next section's notes get appended below as more screenshots come in.)*
