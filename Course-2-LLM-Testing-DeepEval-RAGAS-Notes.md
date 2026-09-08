@@ -386,4 +386,121 @@ This closes out the Ollama section. From the next section onward, the course mov
 
 ---
 
+## Section 3.1 — LLM Testing, Mapped onto Traditional Software Testing
+
+A new section begins here — this is where the course starts actually using **DeepEval**. Before writing any code, this lecture deliberately maps LLM testing onto the traditional testing vocabulary a software test engineer already knows, so the DeepEval code that follows lands on familiar ground rather than feeling like an entirely new discipline.
+
+### Definition
+LLM testing = evaluating an LLM's output to make sure it meets specific criteria (accuracy, coherence, fairness, safety) for its intended purpose.
+
+### The core difference from traditional testing
+In traditional software, outcomes are predictable and a bug can usually be traced back to a specific block of code. LLMs behave like a **black box** with an effectively infinite range of possible inputs and outputs — there's no single line of code to point at when something goes wrong.
+
+### Mapping LLM testing onto the four traditional testing types
+
+**1. Unit testing → single-response evaluation**
+Traditional unit testing checks the smallest testable piece of an application. For an LLM, that's evaluating one response to one input against a clearly defined expectation — exactly the "capital of New Zealand → Wellington" example used repeatedly earlier in this course. Simple, clear, pass/fail.
+
+**2. Functional testing → task-level proficiency across many inputs**
+Traditional functional testing verifies an entire user flow (e.g. logging in end-to-end). LLM functional testing instead checks how well the model performs *a specific task* — like text summarization — across a wide *range* of different inputs, not just one flow.
+
+*In plain terms: it's less "does this one screen work" and more "does this one capability (summarizing) hold up across many different documents/questions," since there's no fixed "flow" to click through in an LLM app the way there is in a traditional UI.*
+
+**3. Regression testing → same test cases, every iteration**
+Run the same set of test cases every time a change is made, to catch breaking changes. The advantage of using quantitative metrics for this: you can set a clear **threshold** for what counts as "broken," and track how performance drifts across iterations over time.
+
+*In plain terms — an important nuance: an LLM regression test doesn't need the exact same wording every single run to "pass" — it needs the same **meaning/context** to hold. If the response keeps landing on the same underlying answer (even phrased differently), that's fine. If the context keeps shifting or the model starts hallucinating, *that's* a real regression, even if no code changed — because the "code" here is really the prompt + model + surrounding data, any of which can drift.*
+
+**4. Responsibility testing → not part of traditional testing at all**
+This one has no real traditional-testing equivalent: testing the LLM's output against **responsible-AI metrics** — bias, toxicity, fairness — regardless of what task is being performed. Already touched on in Section 1.5 (Bias Detection), but worth noting here explicitly as its own category, since nothing like it exists in classic software QA.
+
+### Why this framing matters
+The metrics already covered across earlier sections (answer relevancy, tool/function-calling accuracy, contextual precision/recall, and so on — Sections 1.1, 1.3, 1.5) are the actual mechanics that implement these four categories. This lecture's job was just to line them up against a mental model already familiar from ordinary QA work, before the course starts writing real DeepEval code in the next lecture.
+
+---
+
+## Section 3.2 — The Non-Traditional Approach: LLM-Specific Metrics
+
+Having mapped LLM testing onto traditional testing categories (Section 3.1), this lecture turns to the metrics side — evaluating an LLM (whether it's a raw model, an AI agent, a chatbot, a RAG system, or a fine-tuned model) always needs a different toolkit than unit/integration/regression testing alone.
+
+### Statistical NLP metrics — named, but explicitly out of scope for this course
+Three classic statistical evaluation metrics get named:
+- **BLEU** (Bilingual Evaluation Understudy)
+- **ROUGE** (Recall-Oriented Understudy for Gisting Evaluation)
+- **METEOR** (Metric for Evaluation of Translation with Explicit Ordering)
+
+These matter mainly when **fine-tuning** a model — checking how closely its output overlaps, word-for-word, with reference translations/summaries. The instructor has a separate course specifically on fine-tuning with Hugging Face that covers these in depth; this course intentionally skips them.
+
+*In plain terms: this closes a loop from Section 1.1 — BLEU and ROUGE were already named there under "traditional metrics" (word-order/structure comparison against a reference). This lecture is just confirming explicitly: those are for fine-tuning work, not for the kind of application-level LLM testing this course focuses on.*
+
+### The metrics this course actually cares about
+- **Answer Relevancy** — does the output address the given input informatively and concisely? (Already named in Section 1.5; will get its own code-based deep dive soon.)
+- **Prompt Alignment** — does the output actually follow the instructions given in the prompt template? (A newly named metric here — distinct from just "is the answer relevant," this checks whether the model *obeyed the instructions themselves*, e.g. format, constraints, or structure requested in the prompt.)
+- **Correctness** — is the output actually correct.
+- **Hallucination** — does the output contain fake/made-up information, or is it accurate?
+- **Contextual Relevancy, Contextual Recall** — already covered in Section 1.5's RAG-metrics breakdown.
+
+*In plain terms: "Prompt Alignment" vs. "Answer Relevancy" is a subtle but useful distinction — Relevancy asks "is this a good, on-topic answer," while Alignment asks "did it actually follow the specific instructions I gave it" (e.g. Course 1's Section 4.4 example of asking for "just the code block, no extra text" — a good, correct answer that ignores that formatting instruction would fail Prompt Alignment even while passing Answer Relevancy).*
+
+### What's next
+The next lecture returns to **LLM-as-a-judge** (first introduced in Section 1.3) with more depth on how it makes evaluating against metrics like these practical.
+
+---
+
+## Section 3.3 — LLM as a Judge, in Depth
+
+This lecture is the conceptual anchor for the entire rest of this section: **almost every metric this course is about to write code for actually runs on "LLM as a judge" under the hood.**
+
+### The mechanism
+An LLM is used to assess the output of another LLM-based application — a chatbot, Q&A system, AI agent, or RAG system, doesn't matter which. A common real-world pattern: use a *more capable* model as the judge to evaluate the output of an application built on a *smaller* one (e.g. using DeepSeek to judge output produced by a Qwen 2.5-based app). The judge model is given a specific prompt asking it to rate generated content against predefined criteria — effectively acting as an autonomous evaluator, with no human needed to review each output.
+
+### Why this approach wins
+1. **Cost** — avoids the high cost of having humans manually review every LLM output.
+2. **Speed and scale** — enables rapid, consistent, scalable evaluation, especially for outputs too large for a person to realistically review one by one.
+3. **Quality** — G-Eval (an LLM-as-judge-based metric) is explicitly said to outperform the statistical tools from Section 3.2 (BLEU, ROUGE, METEOR) at actually judging output quality.
+
+*In plain terms: this directly answers a natural question raised back in Section 1.3 — LLM-as-judge isn't just "the lazy middle option" between human grading and code-based grading, it's presented here as genuinely *more accurate* than the older statistical approach, on top of being cheaper and faster than human review.*
+
+### The big reveal: both DeepEval and RAGAS run on this
+Nearly every metric already covered in this course is, under the hood, implemented via LLM-as-a-judge in both tools:
+- **DeepEval** — uses **G-Eval** as its general-purpose judge-based metric; and for RAG metrics (answer relevancy, faithfulness, contextual relevancy, contextual precision, contextual recall) and agentic metrics (task completion, tool correctness), all of it runs through an LLM acting as judge. Same story for hallucination and bias detection.
+- **RAGAS** — the exact same pattern: answer relevancy, faithfulness, contextual relevancy, toxicity detection, bias detection — all LLM-as-judge based.
+
+*In plain terms: this is the thread tying together nearly everything covered so far in this course — Section 1.3's metric list, Section 1.5's deep dive (answer relevancy, contextual precision/relevancy, tool selection, bias detection, function accuracy), and Section 3.2's "metrics this course cares about" — every one of those, once real code gets written, will turn out to be "ask a judge LLM to score this," not a hand-written scoring formula. Worth keeping in mind going forward: whenever the DeepEval/RAGAS code calls a metric by name, there's an LLM quietly making that judgment call behind the scenes — which also means the judge LLM's own reliability/quality matters for how trustworthy the evaluation result actually is.*
+
+### What's next
+Starting the next lecture, the course begins working through each evaluation metric one at a time, actually writing the code — applying everything covered theoretically across this section so far.
+
+---
+
+## Section 3.4 — First DeepEval Code: Answer Relevancy, Using an OpenAI Key
+
+The first real hands-on DeepEval code. Even though this course is generally about local LLMs, the instructor deliberately starts with an **OpenAI API key** first — because in many real companies, teams use a paid OpenAI key rather than a local model, so it's worth seeing both ways.
+
+### Setting up the OpenAI key
+Two ways shown:
+1. **Export it directly in the terminal:** get the key from platform.openai.com (login → Settings → API Keys → create/copy a secret key), then `export OPENAI_API_KEY=<key>`.
+2. **Use a `.env` file instead:** create a `.env` file containing `OPENAI_API_KEY=<key>`, then in code, use `python-dotenv`'s `load_dotenv()` to load it in.
+
+*In plain terms: this repo already follows exactly the second pattern — `.env` (gitignored) already holds keys like `ANTHROPIC_API_KEY`, and `python-dotenv` is already installed and used the same way in `browser_use_basic.py`.*
+
+### The first DeepEval test — Answer Relevancy
+The test builds an `LLMTestCase` with three pieces:
+- **`input`** — "Who is the current president of the United States of America?"
+- **`actual_output`** — the response being evaluated
+- **`retrieval_context`** — "Joe Biden serves as the current president of America" (used here as the test's ground truth for this demo, regardless of real-world accuracy)
+
+Then it measures the **Answer Relevancy** metric against those three pieces.
+
+**First run:** `actual_output` set to Joe Biden (matching the given context) → relevancy score comes back **1.0** (pass). Confirmed working both inside the notebook and as a standalone `test.py` run from the terminal (`python3 test.py`), visibly calling GPT-4 behind the scenes to do the judging.
+
+**Second run:** `actual_output` changed to "In 2025, the president of the United States is Donald Trump" → the test **fails**, score **0.0** — because that answer doesn't align with the `retrieval_context` given in the test case.
+
+*In plain terms — the single most important thing to take from this demo: Answer Relevancy here is checking whether the output aligns with the **context provided in the test case**, not whether it's factually true in the real world. Joe Biden isn't marked "correct" because he's actually the real president — he's correct *because that's what the test case's `retrieval_context` says*. This is exactly Section 1.3's abstract "golden data" idea, now seen as a real, literal field (`retrieval_context`) in DeepEval's actual test case API — the ground truth is whatever you feed the test, and the metric checks alignment against that, not against the real world.*
+
+### What's next
+This lecture was just a first working example to prove the pipeline runs end-to-end; the next lecture goes back and explains the actual code (the `LLMTestCase` structure, how metrics get measured) in proper detail.
+
+---
+
 *(Next section's notes get appended below as more transcripts/screenshots come in.)*
