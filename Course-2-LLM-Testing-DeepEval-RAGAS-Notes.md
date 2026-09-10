@@ -503,4 +503,344 @@ This lecture was just a first working example to prove the pipeline runs end-to-
 
 ---
 
+## Section 3.5 — Contextual Precision, Full Code Walkthrough, and a Key Lesson: Different Metrics Need Different Fields
+
+### A glimpse of how many metrics DeepEval actually has
+Typing `deepeval.metrics.` and letting autocomplete list options reveals far more than just Answer Relevancy — Image Editing metrics, Knowledge Retention, Conversation Relevancy, Multimodal Faithfulness, Conversational G-Eval, and many more. The course won't dive into all of them immediately — just building up one at a time, starting simple.
+
+### Writing a Contextual Precision test, step by step
+1. **Imports:** `from deepeval.test_case import LLMTestCase` and `from deepeval.metrics import ContextualPrecisionMetric` — same pattern as any Python library import (compared here to `using` in C# or `import` in Java/JavaScript).
+2. **Instantiate the metric:** `contextual_precision_metric = ContextualPrecisionMetric()`.
+3. **Build the test case:** `LLMTestCase(input=..., actual_output=..., retrieval_context=...)`.
+   - `input`: "Who is the current president of USA in 2024?"
+   - `actual_output`: "Donald Trump"
+   - `retrieval_context`: "Donald Trump serves as the current president of America" (deliberately made to *match* this time, unlike Section 3.4's mismatched Biden/Trump example)
+4. **Measure it:** `contextual_precision_metric.measure(test_case=test_case)` (there's also an async `a_measure()`, not used here).
+5. **Read the results:** `.score`, `.success`, `.score_breakdown` (breakdown comes back `None` here since there's only a single score to report).
+
+### `LLMTestCase`'s full set of parameters
+Hovering over `LLMTestCase` reveals it accepts far more than the three fields used so far: `input`, `actual_output`, `expected_output`, `context`/`retrieval_context`, additional metadata, comments, **`tools_called`**, **`expected_tools`**, `reasoning`, `name`, and more.
+
+*In plain terms: this is Section 1.3's abstract test-case shape (input, golden data, model output, tool output, score) now shown as the real, concrete parameter list of an actual class — and it directly explains where Section 1.5's agentic metrics come from: `tools_called` vs. `expected_tools` is precisely what Tool Selection Accuracy and Function/Argument Accuracy compare against, as real fields on the same test case object used for every other metric.*
+
+*Also worth remembering: these are hardcoded placeholder values for the demo. In a real pipeline, `actual_output` would come from your actual LLM/agent/RAG system's live response, and `retrieval_context` would come from wherever that system actually retrieved its context from — a vector database for a RAG system (this repo's own `rag_app.py` is exactly that kind of pipeline), an agent's tool-call results for an AI agent, or the LLM's own response for a plain model.*
+
+### The key lesson: a missing required field fails loudly, not silently
+Running the test *without* `expected_output` fails immediately with a clear error: **"Missing test case parameter... Expected output cannot be None for ContextualPrecisionMetric."** Unlike Section 3.4's Answer Relevancy metric (which only needed input/actual_output/retrieval_context), **Contextual Precision additionally requires `expected_output`** to have anything to measure precision against.
+
+Adding `expected_output = "Donald Trump is the current president of USA"` and re-running fixes it: `score = 1.0`, `success = True`, `score_breakdown = None`.
+
+*In plain terms: the practical takeaway here matters more than this specific example — **every metric has its own required fields**, and DeepEval fails fast and tells you exactly what's missing rather than silently returning a meaningless score. Good habit going forward: check what a given metric actually needs before assuming the same three fields work everywhere.*
+
+### Not yet recorded anywhere
+This test ran entirely locally — nothing was pushed to DeepEval's cloud dashboard, **Confident AI** (previewed briefly back in Course 2, Section 1.6, as confident-ai.com). Recording results there for historical tracking/dashboards is what the next lecture covers.
+
+---
+
+## Section 3.6 — From `.measure()` to `evaluate()`: Pushing Results to Confident AI
+
+### A disclaimer worth remembering
+The instructor notes this section (and a couple more) got **re-recorded** because DeepEval shipped major breaking changes (moving from roughly v2 to v3.35 at recording time) — new UI, and two entirely new test case types added mid-course. Worth keeping in mind generally: DeepEval is a fast-moving library, and code/APIs from any tutorial (this course included) can drift from whatever version is actually installed.
+
+*In plain terms — this isn't abstract: exactly this kind of version drift is what caused the debugging earlier in this session's own notebook work. This repo's `myenv` venv has DeepEval 4.2.2 (newer even than this lecture's 3.35), and its `OllamaModel`/config-routing behaved differently from what an older version would expect — the same "breaking changes across versions" pattern flagged here, just experienced firsthand.*
+
+### `.measure()` vs. `evaluate()`
+Everything done so far (Sections 3.4–3.5, and the two answer-relevancy/contextual-precision runs earlier in this session) used a metric's `.measure()` method directly — DeepEval calls this the **"standalone"** way, because it runs entirely locally and never pushes anything to DeepEval's cloud dashboard, **Confident AI** (first mentioned in Section 1.6).
+
+The `evaluate()` function instead:
+- Sends results to the Confident AI portal.
+- Returns far richer reporting than `.measure()`'s plain score/success output.
+
+### The code change
+Minimal — swap the metric's own `.measure(test_case=...)` call for DeepEval's top-level `evaluate()` function:
+```python
+from deepeval import evaluate
+from deepeval.test_case import LLMTestCase
+from deepeval.metrics import AnswerRelevancyMetric
+
+test_case = LLMTestCase(
+    input="Who is the current president of the United States of America?",
+    actual_output="Joe Biden",
+    retrieval_context=["Joe Biden serves as the current president of America"]
+)
+
+evaluate(test_cases=[test_case], metrics=[AnswerRelevancyMetric()])
+```
+Note both `test_cases` and `metrics` are **lists (plural)** — `evaluate()` is built to run *multiple* test cases against *multiple* metrics in one call, not just one at a time.
+
+### New test case types (added since the original recording)
+Beyond `LLMTestCase` (used throughout so far), two more now exist:
+- **`ConversationalTestCase`** — for testing chatbots across a multi-turn conversation, not just one input/output pair.
+- **`MLLMTestCase`** — for multimodal LLMs (image/video/audio capability, not just text).
+
+*In plain terms — MLLM ties directly back to Course 1's Section 3.3 (Llama 3.2's multimodal 11B/90B models): this is the DeepEval-side test case for evaluating exactly that kind of model, once it needs to handle more than plain text.*
+
+### What shows up in the Confident AI portal
+Running the same Answer Relevancy test through `evaluate()` instead of `.measure()` produces, in the dashboard:
+- An **eval insight** panel suggesting next actions (e.g. logging hyperparameters).
+- A model overview of the test run.
+- The full test case (input, actual output, retrieval context) laid out clearly.
+- The **score and threshold** (default threshold shown: 0.5) — success/failure is threshold-based, not just "score exists."
+- A **natural-language explanation** of *why* that score was given (e.g. "the answer was fully relevant and directly addressed the question, with no irrelevant information").
+- **Run duration** and which model did the judging (GPT-4.1 at recording time).
+- **Cost** — the actual dollar amount spent on that evaluation's API calls.
+- A historical view — each run becomes one point that builds into a trend/graph over time as more evaluations accumulate.
+
+*In plain terms: the cost-tracking feature is a direct, concrete payoff of Section 1.3's "cost savings" benefit and Section 2.1's "local models save money" point — seeing an actual dollar figure per evaluation run is what makes it obvious just how quickly LLM-as-judge evaluation costs can add up at scale with a paid API, and why a local judge model (as already set up and working in this session, via Ollama) avoids that cost entirely.*
+
+*Also worth noting: this repo's `.env.local` already holds a `CONFIDENT_API_KEY` (found and gitignored earlier in this session) — meaning Confident AI is already set up and ready to actually try hands-on here, if wanted.*
+
+---
+
+## Section 3.7 — Multiple Test Cases, A/B Comparison, and a Genuinely Important Nuance About Answer Relevancy
+
+### Running two test cases at once
+A second `LLMTestCase` gets added — `input="Who built the GPT models?"`, `actual_output="OpenAI"`, `retrieval_context=["OpenAI built the GPT models"]` — and both test cases are passed into the same `evaluate(test_cases=[test_case_1, test_case_2], metrics=[...])` call. (The lecture flags again that hardcoding `actual_output` is only for learning the mechanics — in a real pipeline it would come from an actual LLM/RAG/agent response, as already noted in Section 3.5.)
+
+### The Compare Test Results page
+Confident AI's dashboard includes a **Compare Test Results** view — an A/B-style comparison between different evaluation runs over time. Comparing a run with only 1 test case against one with 2 test cases isn't a clean apples-to-apples comparison, so the lecture deliberately sets up a fairer side-by-side next.
+
+### A revealing experiment: does Answer Relevancy really only check the given context?
+This is the most important part of the lecture, and it **refines** something stated back in Section 3.4:
+
+- Test: `input="Who built the GPT model?"`, `actual_output="OpenAI"` — but this time `expected_output` and `retrieval_context` were deliberately set to **wrong/misleading** values: `"Cloud Anthropic built the GPT model"`. Result: **the test still passes**, Answer Relevancy stays high.
+- Then the `input` was changed to `"Who built the Claude model?"` (still `actual_output="OpenAI"`). Result: **the test now fails**, score drops to 0.
+
+*In plain terms — why this matters: Section 3.4 said Answer Relevancy checks alignment with "the context provided in the test case," not real-world truth. This lecture shows that's not the whole picture — the **judge LLM's own background knowledge** also plays a real role. In the first case, even though the fed-in context/expected-output was wrong, the judge model (GPT-4.1) "knew" from its own training that OpenAI actually built GPT, and scored the answer as relevant anyway. Only once the *question itself* changed to something where "OpenAI" is genuinely the wrong answer (Claude was built by Anthropic, not OpenAI) did the judge correctly fail it — using its own knowledge, not just the fabricated context it was handed. **The honest takeaway: for well-known facts, a capable judge LLM can catch a wrong answer even if the test case's own supplied context tries to mislead it — but this isn't something to rely on. It's a property of how good/knowledgeable the specific judge model happens to be for that particular fact, not a guarantee of the metric itself.** For genuinely obscure or company-specific facts the judge model has no training knowledge of, the metric would likely lean on the given context, closer to the simpler framing from Section 3.4.*
+
+### Comparison only works with `evaluate()`, not `.measure()`
+The A/B comparison view visibly highlights the change between runs (a metric flipping from a passing 1 down to a failing 0) — and this comparison capability is exclusive to the `evaluate()` + Confident AI workflow. The standalone `.measure()` method (Sections 3.4–3.5) has no equivalent — no history, no run-to-run comparison, since nothing gets recorded anywhere.
+
+### What's next: handling many test cases (datasets)
+Two test cases hardcoded inline clearly doesn't scale to real LLM application testing, which needs many. The next lecture covers building an actual **dataset** of test cases, rather than writing each one by hand inline.
+
+---
+
+## Section 3.8 — Goldens and Datasets: Separating the "Truth Set" from the Test Run
+
+### What a "golden" actually is
+In DeepEval, an evaluation **dataset** is a collection of **goldens**. A golden is a *precursor* to a test case — at evaluation time, every golden in a dataset gets converted into an actual `LLMTestCase` before the evaluation runs against it.
+
+### Why not just use test cases directly?
+The core distinction: a **golden** holds information that should stay fixed/permanent — a genuine "ground truth" record, meant to be stored safely once and reused. A **test case** is comparatively volatile — its `actual_output` in particular changes every time the real LLM/RAG/chatbot it's testing produces a fresh response.
+
+*In plain terms — a relatable analogy from ordinary test automation: a golden is like a **test data fixture** (a fixed input + expected value you keep in a file, that shouldn't casually change), while a test case is like **one actual test run/result** built from that fixture at execution time. You keep the fixture stable and trustworthy; the actual execution result is naturally different every time the system under test runs.*
+
+### Building a golden and a dataset in code
+New imports: `from deepeval.dataset import EvaluationDataset, Golden`.
+
+```python
+golden = Golden(
+    input="Who is the current president of the United States of America?",
+    expected_output="Joe Biden",
+    context=["Joe Biden serves as the current president of America"]
+)
+
+dataset = EvaluationDataset()
+dataset.add_golden(golden)
+```
+
+**One key naming difference to remember:** `LLMTestCase` uses `retrieval_context`, but `Golden` uses just `context` — same underlying idea, different field name.
+
+`Golden` accepts largely the same shape as `LLMTestCase` — optional `actual_output`, `expected_output`, `context`, `tools_called`/`expected_tools`, plus `source_file`, custom column key-values, and `expected_outcomes` (specifically for conversational goldens). `EvaluationDataset` starts empty (`EvaluationDataset()`), and `add_golden()` can add a golden directly from the class, or bulk-import many at once from a **CSV or JSON file** — and can even accept full test cases or conversational goldens directly, not just plain goldens.
+
+*In plain terms: right after adding a golden, the dataset shows **0 test cases** but does hold the golden data — the golden→test-case conversion is a separate step that happens later, at actual evaluation time (covered in the next lecture). This is the concrete, coded version of the "golden data" idea already introduced back in Section 1.3.*
+
+### Another disclaimer about breaking changes
+The instructor again flags this specific area (`EvaluationDataset`) as one of the most heavily changed parts of DeepEval since the course was first recorded — enough that students had complained the original lectures felt obsolete, prompting this re-recording.
+
+### What's next
+The next lecture picks up from here — actually converting these goldens into test cases and running an evaluation against them.
+
+---
+
+## Section 3.9 — Converting Golden → Test Case, and Two Real Live Bugs
+
+### The conversion code
+Picking up from Section 3.8's dataset of goldens, each golden gets turned into a real `LLMTestCase` and added back into the dataset:
+```python
+for golden in dataset.goldens:
+    test_case = LLMTestCase(
+        input=golden.input,
+        expected_output=golden.expected_output,
+        retrieval_context=golden.context,
+        actual_output="Joe Biden"  # has to be supplied separately - see below
+    )
+    dataset.add_test_case(test_case)
+
+evaluate(test_cases=dataset.test_cases, metrics=[AnswerRelevancyMetric()])
+```
+Note `dataset.test_cases` is used directly as the list passed into `evaluate()` — no need to manually build an array, since the dataset already collects them.
+
+### Bug #1: `dataset.golden` → should be `dataset.goldens`
+The first attempt used the singular `golden` and hit an error — the dataset's actual attribute is the **plural** `goldens`. A simple typo, but a good reminder to check the exact API rather than guess from how the class name reads.
+
+### Bug #2: "actual output cannot be None" — and *why* that's expected
+The second, more instructive error: `actual_output` was missing. This isn't an oversight to just patch around — it's the **direct, hands-on confirmation of Section 3.8's whole point**: a `Golden` deliberately does *not* carry `actual_output`, because that value is supposed to come from the real system under test (an LLM call, a RAG pipeline, a chatbot, an agent) at evaluation time — not from the static "truth set." Since there's no real application wired up yet in this demo, `actual_output="Joe Biden"` gets hardcoded manually as a stand-in.
+
+*In plain terms: this error is the golden/test-case split actually doing its job — it's forcing you to explicitly decide where the real, live output comes from, rather than silently letting a fixed value pass as if it were a real response.*
+
+### Bug #3 (not named as one, but worth flagging): stale data from re-running cells
+Re-running the golden→test-case conversion cell multiple times (while debugging bugs #1 and #2) caused the dataset to accumulate leftover, incomplete test cases from the earlier failed attempts. The fix was re-running the dataset-creation cell from scratch to get a clean dataset before the evaluation would actually pass.
+
+*In plain terms — this maps directly onto Jupyter-notebook debugging in general, not just DeepEval specifically: notebook cells share state across re-runs, so a half-fixed bug can leave stale objects (like a partially-built dataset) sitting around even after the code itself looks correct. This is the exact same category of issue as this session's own earlier DeepEval/Ollama debugging — a kernel restart was needed there too, for a similar reason (stale config not being picked up).*
+
+### The payoff: it works, and shows up on the historical graph
+Once fixed, the evaluation runs successfully and pushes to Confident AI — the test case passes. Going back to the evaluation history view (first seen in Section 3.6/3.7), there's a visible **dip** in the trend line from the earlier failed attempts during debugging — a real, honest record of the mistakes made along the way, not just the final clean result.
+
+---
+
+## Section 3.10 — Scaling Up: Pushing a Golden Dataset to Confident AI for Reuse
+
+### The real-world problem
+One hardcoded golden is fine for learning, but real projects need thousands of them — and the same golden data often needs to be reused across *multiple different evaluations, or even multiple projects/teams*. Storing them as a big local JSON blob inside one test file doesn't solve that reuse problem; what's needed is one **central place** to store goldens.
+
+### Confident AI's Datasets feature
+The Confident AI portal has a dedicated **Datasets** tab, supporting both single-turn (plain Q&A-style) and multi-turn (conversational) datasets — goldens can be added there directly through the UI, tagged, assigned to teams, and filtered by properties like golden ID or a "finalized" tag.
+
+*Practical note: the free tier only allows one dataset at a time — the instructor deletes a manually-created UI dataset here specifically to instead demonstrate the code-driven approach below, which is the more realistic workflow anyway.*
+
+### Building goldens from a plain data array, in a loop
+Instead of one hardcoded `Golden`, this starts from a plain Python list — simulating data handed over by a data engineer:
+```python
+test_data = [
+    {"input": "Who is the current president of America?", "expected_output": "Joe Biden"},
+    {"input": "Who introduced the GPT model?", "expected_output": "OpenAI"}
+]
+
+goldens = []
+for data in test_data:
+    golden = Golden(input=data["input"], expected_output=data["expected_output"])
+    goldens.append(golden)
+```
+
+### Building the dataset — and a shorthand
+Rather than calling `add_golden()` once per item (Section 3.8's approach), `EvaluationDataset` can take the whole `goldens` list directly:
+```python
+new_dataset = EvaluationDataset(goldens=goldens)
+```
+
+### Pushing it to Confident AI
+```python
+new_dataset.push(alias="test golden dataset", overwrite=True)
+```
+- `alias` — the name the dataset gets in the Confident AI portal.
+- `overwrite` (defaults to `False`) — set to `True` so re-running this push **updates** the existing dataset instead of duplicating every record each time the script runs again.
+
+Running this opens the Confident AI portal directly, showing both goldens now stored centrally — the president question paired with "Joe Biden," and the GPT question paired with "OpenAI."
+
+*In plain terms: `overwrite=True` here is the same idempotency concern that matters in any real pipeline or CI script — without it, re-running the same push repeatedly would just keep piling up duplicate records instead of cleanly updating the same dataset. And this repo already has a `CONFIDENT_API_KEY` sitting in `.env.local` (found and gitignored earlier in this session), so this exact push-to-cloud workflow is genuinely ready to try hands-on if wanted.*
+
+### What's next
+The next lecture covers the other half of this workflow: **pulling** a dataset back down from Confident AI (instead of rebuilding it from scratch every time) to actually run an evaluation against it.
+
+---
+
+## Section 3.11 — Pulling a Dataset Back, a Mock App, and a Surprising Answer Relevancy Result
+
+### Pulling the dataset back down
+To actually round-trip the workflow, the dataset gets pulled into a **fresh variable** (not the one used to push it, which already holds the data locally and would make the pull pointless to demonstrate):
+```python
+cloud_dataset = EvaluationDataset()
+cloud_dataset.pull(alias="test golden dataset")
+```
+After this, `cloud_dataset.goldens` holds the two records fetched live from Confident AI.
+
+### Building a tiny mock app (since two goldens now need two different answers)
+Section 3.9's approach of hardcoding one `actual_output = "Joe Biden"` doesn't work anymore — the dataset now has two different questions needing two different correct answers. A minimal stand-in "application" is written instead:
+```python
+def mock_llm_app(input):
+    if input == 1:
+        return "Joe Biden"
+    elif input == 2:
+        return "OpenAI"
+```
+A simple counter (starting at 1, incremented each loop iteration) drives which branch fires for each golden as the loop converts goldens into test cases, using this mock app's return value as `actual_output`.
+
+*In plain terms: this is a deliberately bare-bones stand-in for what would, in a real system, be an actual call to your LLM/RAG pipeline/agent — the same idea flagged back in Section 3.5 about where `actual_output` is really supposed to come from. This repo's own `rag_app.py`/`shoe_store_agent.py` are exactly the kind of real application that would eventually replace a mock function like this.*
+
+### The real payoff: editing ground truth centrally, without touching code
+With test cases built and `evaluate(test_cases=cloud_dataset.test_cases, metrics=[AnswerRelevancyMetric()])` passing, the golden's `expected_output` for the president question gets edited **directly in the Confident AI web UI** — changed from "Joe Biden" to "Donald Trump" — with zero code changes.
+
+**Expectation:** re-running the exact same evaluation code should now fail, since the mock app still returns "Joe Biden" while the golden now expects "Donald Trump."
+
+**What actually happened: the test still passed.**
+
+### Why — a genuinely important nuance about Answer Relevancy
+The instructor's explanation: this test case was never given a `retrieval_context`. **Answer Relevancy doesn't actually compare `actual_output` against `expected_output` at all** — it only checks whether the actual output is a relevant answer to the *input question itself*. "Joe Biden" is still a perfectly relevant-sounding answer to "who is the president," regardless of what the golden's `expected_output` field currently says — so the metric has no reason to fail it.
+
+*In plain terms — this refines something already flagged in Section 3.7: there, the judge model's own knowledge was shown to matter alongside supplied context. This goes a step further — for Answer Relevancy specifically, `expected_output` isn't even part of what the metric checks by default, when there's no `retrieval_context` tying things together. That kind of "does the actual output match the expected/golden answer" comparison belongs to other metrics — Contextual Precision (Section 3.5) explicitly required `expected_output` to function at all, which is a strong hint it's actually being used there for comparison, unlike here. The lecture defers a full explanation to the upcoming RAG-focused sections, where `retrieval_context` gets used properly.*
+
+### The bigger picture
+Despite this particular metric quirk, the workflow itself is the real point: centralizing goldens in Confident AI means **non-engineers on a team can edit ground-truth data directly through a UI**, and the exact same evaluation code automatically picks up whatever the current cloud data says — no code redeploy needed just to update test expectations.
+
+---
+
+## Section 3.12 — Course Errata: `deepeval set-ollama` Syntax Changed
+
+A short instructor note posted ahead of the next lecture (which covers using local models like DeepSeek R1 as the evaluation judge instead of OpenAI): the CLI command shown in the recorded video,
+```
+!deepeval set-ollama deepseek-r1:8b
+```
+breaks on current DeepEval v4.x. The fix is one extra flag:
+```
+!deepeval set-ollama --model deepseek-r1:8b
+```
+The instructor already patched this in the course's Section 3 source code, but flags it explicitly since — as already disclaimed several times across this section (3.6, 3.8) — DeepEval keeps shipping breaking changes, and more are expected as the course continues.
+
+*In plain terms: this is the exact same command already used successfully, hands-on, earlier in this session — `deepeval set-ollama --model=llama3.2:1b` (with an `=` instead of a space) worked correctly when fixing the notebook's OpenAI rate-limit issue. Both the `--model X` and `--model=X` forms are standard for this kind of CLI flag, so either works — this errata is just confirming the flag needs to be named explicitly (`--model`), not passed as a bare positional argument like the original recording showed.*
+
+---
+
+## Section 3.13 — Switching the Evaluation Judge from OpenAI to a Local Ollama Model
+
+### The command
+Inside a notebook cell, prefixing a shell command with `!` runs it directly (standard Jupyter syntax — not Python code):
+```
+!deepeval set-ollama --model deepseek-r1:8b
+```
+The instructor picks **DeepSeek R1 8B** specifically for being lighter/more performant on his machine, after considering alternatives — including **gpt-oss** (OpenAI's own open-weight model family, offered in a 20B-parameter size among others, also pullable via Ollama).
+
+### What this actually changes, under the hood
+Running the command updates the same `.deepeval/.deepeval` config file already fixed by hand earlier in this session, setting:
+- `LOCAL_MODEL_NAME` → `deepseek-r1:8b`
+- `LOCAL_MODEL_BASE_URL` → the local Ollama endpoint
+- `USE_LOCAL_MODEL` → `YES`
+- `USE_AZURE_OPENAI` → `No`
+- `LOCAL_MODEL_API_KEY` → `ollama`
+
+(The same config folder separately holds the Confident AI API key/config, from Section 1.6/3.10's Confident AI setup.)
+
+*In plain terms — this closes the loop on the debugging done earlier in this very session: fixing the notebook's OpenAI `RateLimitError` involved manually working out and setting almost this exact same set of keys (`LOCAL_MODEL_NAME`, `LOCAL_MODEL_BASE_URL`, `USE_LOCAL_MODEL`, `LOCAL_MODEL_API_KEY`) by hand, one at a time, through trial and error. This lecture is the "official" version of that same fix — confirming the manual config edits done earlier were exactly right, just arrived at by reverse-engineering rather than by running the documented CLI command.*
+
+### What's next
+Once this is set, the next lecture actually runs an evaluation using this local model as the judge, instead of OpenAI.
+
+---
+
+## Section 3.14 — Running Local, Hitting a Different Kind of Quota, and Closing Out DeepEval Basics
+
+### Same code, zero cost this time
+With the local model configured (Section 3.13), the *exact same* existing `evaluate()` code runs unchanged — no code edits needed — but now judges with DeepSeek R1 8B via Ollama instead of GPT-4.1. Cost for this run: nothing.
+
+### A different free-tier limit shows up: Confident AI's own run cap
+Running it hits a message: **"only ten runs are allowed every week. Upgrade to our starter plan to unlock unlimited evaluations."** This isn't a cloud-LLM-API cost limit (that's already zero with a local judge) — it's **Confident AI's own dashboard quota**, capping free-tier accounts at 10 evaluation runs per week, regardless of which model is doing the judging.
+
+**Workaround shown:** manually delete old/unneeded runs from the Confident AI history to free up quota within the weekly cap — the instructor deletes enough runs to get back down with a few remaining for the rest of the demo, rather than upgrading to a paid plan.
+
+*In plain terms — this is a genuinely useful distinction to keep straight, since it's easy to assume "local model = fully free, no limits." There are actually **two separate quota systems** in play here: (1) the LLM provider's own usage limits (OpenAI's paid API, or a local model's total freedom from that), and (2) Confident AI's own reporting/dashboard quota, which caps free-tier *runs*, independent of what model did the judging. Switching to a local judge solves problem #1 but does nothing for problem #2 — this repo's own `.env.local` already holds a `CONFIDENT_API_KEY`, so this exact 10-runs/week ceiling would apply if evaluate() calls get run from here too.*
+
+### Confirming it worked
+After freeing up quota, the run succeeds, and the dashboard's "View full details" panel now shows the evaluation model as **DeepSeek R1 8B (Ollama)** instead of GPT — everything else about the report looks and works the same as the OpenAI-judged runs before it.
+
+### Going forward: mostly local, but not dogmatically so
+From here, the course will lean on the local LLM as judge by default — but explicitly *not* exclusively. The instructor flags that for RAG-related evaluation specifically, a local model might not be capable enough, and the course will "hop" back to a cloud model (GPT) when that's genuinely needed.
+
+*In plain terms: this is a balanced, practical stance rather than an absolutist "always local" rule — pick the judge model based on whether the task actually needs the extra capability, the same "smaller model = less reliable for harder tasks" trade-off already seen concretely in Sections 2.3 (Qwen 1.8B vs. DeepSeek R1 8B on Selenium code) and this session's own live debugging (Contextual Precision failing on `llama3.2:1b` with an "invalid JSON" error until a more capable local model was used).*
+
+### Section wrap-up
+This closes out the DeepEval basics section — everything needed to get started (metrics, `.measure()` vs. `evaluate()`, goldens/datasets, pushing/pulling from Confident AI, local vs. cloud judges) has now been covered. The next section moves from hardcoded/mock outputs to evaluating a **real** LLM application with DeepEval.
+
+---
+
 *(Next section's notes get appended below as more transcripts/screenshots come in.)*
