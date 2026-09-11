@@ -1058,4 +1058,155 @@ RAG-specific and AI-agent-specific evaluation are both explicitly promised for u
 
 ---
 
+## Section 5.1 — New Section: Testing RAG Applications, Starting with Why RAG Matters
+
+### RAG, recapped
+A new course section begins here — testing **RAG (Retrieval-Augmented Generation)** applications with DeepEval. Recap definition: RAG is an AI system that improves an LLM's answer accuracy by retrieving relevant information from external data sources *before* generating a response — rather than relying only on what the model happened to learn during training.
+
+### A perfect, concrete demo of why: asking a local model "What is MCP?"
+Asking DeepSeek R1 (running locally, no RAG grounding) "What is MCP?" produces a confused, wrong answer — the model guesses it could mean "Master Controller Processor," "Minimum Credit Purchase," or even **methyl cellophane** (a chemical compound), never landing on the actual answer: **Model Context Protocol**.
+
+*In plain terms — this lands especially well given Course 1's own Section 7.1 already covered exactly what MCP (Model Context Protocol) is and why it matters: this is a live, unscripted demonstration of the exact problem RAG solves. "MCP" is a genuinely ambiguous acronym, and without being fed the right context, the model falls back on whatever interpretations it picked up during training — missing the specific, current, domain-relevant meaning entirely. Feed the model the actual MCP documentation as retrieved context, and it would reason about MCP correctly instead of guessing at chemistry terms.*
+
+### Where RAG applications get used
+Because RAG applications are built wherever accurate, up-to-date, context-aware responses matter, five example industries are named (explicitly not exhaustive — the list keeps growing as more companies adopt AI):
+1. **Chatbots** — need real-time, current information.
+2. **AI-powered search** — e.g. a company's internal portal, answering domain-specific questions the base model was never trained on.
+3. **Financial and business intelligence**
+4. **Healthcare**
+5. **E-commerce**
+
+### Why RAG is usually a company's first AI application
+RAG gets singled out as often the **first** AI application companies actually build — it's comparatively easy to build, and there's a wide range of existing plugins/integrations available to connect it to an LLM. Because it's so commonly the entry point, testing RAG applications properly is called out as especially critical.
+
+### What's next
+The next lecture covers RAG's architecture from a technical/diagram perspective, before getting into how to actually test a RAG-based application with DeepEval.
+
+---
+
+## Section 5.2 — RAG Architecture, and Why Testers Need to Understand the Internals
+
+### The pipeline, stage by stage
+1. **Extract & index** — pull information from external sources (web pages, PDFs, PowerPoint files, other documents), then split it into smaller **chunks**.
+2. **Embed** — turn each chunk into a vector using an embedding model (an Ollama embedding model, a GPT embedding model, or others).
+3. **Store** — save those embeddings into a **vector database**.
+4. **Retrieve & generate** — at query time, use similarity-search algorithms (e.g. cosine similarity) to find the chunks most relevant to the question, then hand those chunks + the question to the LLM to generate the final answer.
+
+*In plain terms: this matches, almost exactly, the RAG pipeline already described in Course 1's Section 4.6 (the formal R-A-G breakdown) and Section 1.2 (chunking/embedding/vector-store/semantic-retrieval) — good confirmation the two courses are describing the same real mechanism, just from different angles. One concrete, direct tie to this repo's own code: `rag_app.py` (Phase 3 of the roadmap) already uses `nomic-embed-text` as its embedding model via `ollama.embed(...)` — that's a real example of exactly the "Ollama embedding model" step named here, already built and working in this project.*
+
+### Why a tester needs to know this, even though it's "development stuff"
+The instructor is explicit this level of detail is mostly a developer's concern — but a tester should still understand it at a high level, so that when something breaks, you know *where* to look rather than just reporting "the AI gave a wrong answer." (Again pointing to the same separate LangChain-focused Udemy course, "Course 3" from [Udemy-Course-Sequence.md](Udemy-Course-Sequence.md), for anyone who wants the full hands-on build.)
+
+### The value RAG adds — and its real cost
+The upside: RAG lets an LLM answer questions using **your own proprietary data** (e.g. a company's internal medical information) that it was never trained on — turning a generic model into one that can accurately discuss company-specific material. The catch: this comes with real storage and retrieval costs, and a genuine risk that key information gets **lost or mangled** during chunking or embedding — the pipeline can quietly drop or corrupt information before it ever reaches the LLM.
+
+### Where testing comes in — continuing the "What is MCP?" example
+This is exactly why testing a RAG pipeline matters: if you ask a RAG-powered application "What is MCP?" (Section 5.1's example) and it fails to answer correctly, that's a real signal something in the *pipeline* is broken — not necessarily the LLM itself. It could be a **chunking problem** (information split badly) or an **embedding/storage problem** (information not correctly embedded or indexed). As a tester, "AI will just take care of it" isn't good enough — the job is to catch this, and flag it specifically enough that developers know where to actually look.
+
+### How DeepEval fits into testing a RAG pipeline
+The same `LLMTestCase` pattern as before — `input` ("What is MCP?"), `actual_output` (from the RAG-powered application), `expected_output`, and eventually `retrieval_context` (to be covered in more depth soon) — gets passed to DeepEval, judged by DeepSeek R1 as before.
+
+*One subtlety worth noting: when the judge model evaluates a RAG-related question like this, it may itself need to call into the RAG application to get grounding — since the judge model (DeepSeek R1) doesn't inherently know what MCP means any better than the application being tested does. Evaluation here isn't purely "judge reasons from its own knowledge" — it can genuinely depend on the same retrieval system being tested.*
+
+Metrics available: the custom G-Eval approach already covered (Section 4.6), plus dedicated RAG-specific built-in metrics (already glimpsed in Section 4.7's catalog tour) coming up soon.
+
+### What's next
+The course will build up to more elaborate, "multi-stage" test cases specifically for RAG testing later in this section.
+
+---
+
+## Section 5.3 — Building the Actual RAG App to Test: Answering "What is MCP?" for Real
+
+### The payoff to Section 5.1's cliffhanger
+A real, working RAG application gets built as the target for testing throughout this section — and it does exactly the thing the local model *couldn't* do back in Section 5.1: it reads content about the **Model Context Protocol** from a live website, chunks and embeds it into a vector store, and correctly answers questions about MCP at inference time. Same question that produced "master controller processor" / "methyl cellophane" nonsense before — now handled properly, because it's grounded in real retrieved content.
+
+### New dependency: Chroma (a real vector database)
+Beyond the LangChain packages from Section 4.2, this now needs `langchain-chroma` — **Chroma** being an actual vector database, rather than the small hand-rolled cosine-similarity comparison this repo's own `rag_app.py` uses. Same underlying RAG idea, more production-shaped tooling.
+
+### The pipeline, in code
+- `llm = ChatOllama(...)` — same generation-model setup as Section 4.2.
+- Load content from a website (a web loader, pointed at MCP-related documentation).
+- Split the loaded documents into chunks (`chunk_size` set explicitly, `chunk_overlap = 0`).
+- **Embeddings use `llama3.2:latest`** this time — a different embedding model choice than `rag_app.py`'s `nomic-embed-text`. Important gotcha flagged explicitly: this specific model must already be pulled via Ollama before running, since it's the one actually doing embedding here — if it's missing locally, the embedding step fails outright.
+- Store the embedded chunks in **Chroma**.
+- `chain.invoke("What is MCP server?")` → a response.
+
+*One small but real code nuance: because this chain uses a **string output parser**, `chain.invoke(...)` already returns a plain string — unlike Section 4.2's raw `llm.invoke(...).content` pattern (which returns a full `AIMessage` object that needs `.content` pulled out of it). Small detail, but worth catching if copying code between the two patterns.*
+
+### Running it
+Loading, chunking, and embedding the page took about 5.7 seconds. Asking "What is MCP server?" now correctly returns: *"a protocol designed to enable AI systems to interact with various external APIs..."* — properly grounded, unlike Section 5.1's ungrounded guess.
+
+Further questions demoed against the same indexed data:
+- *"What is the relationship between function calling and MCP?"* — a coherent, grounded answer connecting the two concepts.
+- *"Summarize the information for me"* — produces an actual summary rather than the full detail, showing the app handles varied question types against the same underlying store, not just one fixed query shape.
+
+### A pro tip for building intuition
+Try swapping the source URL for a different website/topic entirely and see how the app adapts — a good hands-on way to internalize how RAG actually behaves before diving into testing it.
+
+### What's next
+The next lecture starts actually testing this RAG application with DeepEval — the diagram and theory from Section 5.2, now applied to a real, running system instead of a hypothetical one.
+
+---
+
+## Section 5.4 — Testing the RAG App: A Real Test Case, and Two Custom G-Eval Metrics for Summarization Quality
+
+### Building the test case
+```python
+from deepeval.test_case import LLMTestCase
+from deepeval.dataset import EvaluationDataset
+
+test_case = LLMTestCase(
+    input="What is MCP?",
+    actual_output=response,  # from invoking the RAG chain, Section 5.3
+    expected_output="The Model Context Protocol addresses the challenges by providing a standardized way for LLMs to connect to external data sources and tools..."  # copied from the real source site
+)
+
+dataset = EvaluationDataset()
+dataset.add_test_case(test_case)
+```
+
+*In plain terms: this skips the golden→test-case conversion pattern from Sections 3.8–3.11 entirely, and adds a fully-built `test_case` (already carrying a real `actual_output`) directly to the dataset. That's a legitimate shortcut here — goldens exist specifically for the "reusable, centrally-stored truth set shared across projects" benefit (Section 3.8); for a one-off local test like this, skipping straight to a plain test case is perfectly fine.*
+
+### Two custom metrics, built as a deliberate pair
+The RAG chain's own prompt template (Section 5.3) already instructs the LLM to produce a **summary**, not full detail — so the natural thing to test isn't "is the answer correct" (already covered by other metrics) but **"is the summarization actually good"**. Two G-Eval metrics get built specifically for that, designed as a matched pair:
+
+1. **Conciseness** — criteria: *"Assess if the actual output remains concise while preserving all essential information."* No `evaluation_steps` this time (kept minimal, criteria-only), and notably its `evaluation_params` only needs `ACTUAL_OUTPUT` — not `INPUT`, not `EXPECTED_OUTPUT`. Conciseness is a self-contained property of the output itself (is *this text* short and to the point), so there's nothing else to compare it against.
+2. **Completeness** — criteria: verify the actual output retains all the key elements it should — checking the opposite failure mode from Conciseness.
+
+*In plain terms — this is a genuinely well-designed example of why custom metrics (Section 4.6) exist: Conciseness and Completeness are in natural tension with each other (cut too much for the sake of brevity, and you risk losing key information; keep everything for completeness, and you risk a bloated, unfocused answer) — no single built-in DeepEval metric captures "is this a well-balanced summary" the way a matched pair of custom criteria can. Also a useful, concrete confirmation that `evaluation_params` isn't always `[INPUT, ACTUAL_OUTPUT]` by default — it's genuinely just whichever fields the specific criteria actually needs to reason about, which can be as narrow as `ACTUAL_OUTPUT` alone.*
+
+### What's next
+The next lecture actually runs the evaluation using these two custom metrics against the RAG app's real output.
+
+---
+
+## Section 5.5 — Combining Custom and Built-in Metrics, and the Real Performance Cost of "Everything Local"
+
+### Finishing the Completeness metric
+Criteria: *"Assess whether the actual output retains all the key information from the input."* Kept minimal (criteria-only), matching the style of Section 5.4's Conciseness metric.
+
+### Running both custom metrics together
+```python
+evaluate(test_cases=dataset.test_cases, metrics=[completeness_metric, conciseness_metric])
+```
+Both pass — a 100% pass rate for Completeness and Conciseness on the RAG app's real output.
+
+### Mixing custom and built-in metrics in one call
+The built-in `AnswerRelevancyMetric()` then gets added alongside the two custom G-Eval ones, all in the same `evaluate()` call:
+```python
+evaluate(test_cases=dataset.test_cases, metrics=[completeness_metric, conciseness_metric, AnswerRelevancyMetric()])
+```
+
+*In plain terms: this is the first time in the course custom G-Eval metrics and a built-in DeepEval metric run together side by side in one evaluation call — a useful confirmation that they're not two separate systems, just two ways of defining the same underlying "metric" concept, freely combinable.*
+
+### A real, honest performance cost worth knowing about
+Running all three metrics together visibly strained the machine — audibly ("cranking my fan"), and took almost **2 minutes** to complete. The reason: every one of these calls uses the *same local model* for multiple roles at once — the judge for all three metrics, *and* the RAG application's own generation step (Section 5.3) — meaning several local LLM calls stacking up in parallel on one machine.
+
+*In plain terms: this is a genuine, practical trade-off worth remembering alongside the "local models are free and private" benefit repeated throughout this course (Course 1, Section 3.1; Course 2, Section 2.1) — free of API cost doesn't mean free of *compute* cost. Running many metrics, against many test cases, all locally, adds up fast on a single machine's CPU/GPU, especially when the same model is juggling multiple roles (generator + judge, possibly several times over) in one evaluation run. Worth factoring in when planning a larger local evaluation pipeline — more metrics and more test cases means real, felt runtime and hardware load, not just "free."*
+
+### The result
+All three metrics — Completeness, Conciseness, and Answer Relevancy — pass, and the Confident AI dashboard shows all three results together under one evaluation run. This closes out the demonstration of RAG testing with DeepEval, combining both custom (G-Eval) and built-in metrics against a real, working RAG application.
+
+---
+
 *(Next section's notes get appended below as more transcripts/screenshots come in.)*
