@@ -1209,4 +1209,384 @@ All three metrics — Completeness, Conciseness, and Answer Relevancy — pass, 
 
 ---
 
+## Section 6.1 — New Section: Advanced RAG Testing — Multiple Inputs and the Golden Dataset's Real Purpose
+
+### The questions this section answers
+A new, explicitly **advanced** section, motivated by three related gaps in everything covered so far:
+1. **Testing multiple inputs at once** — every `LLMTestCase` used throughout Sections 3–5 has held exactly one input, one actual output, one expected output, one retrieval context. What if there are many questions to test together, not just one?
+2. **Whatever happened to the golden dataset?** — introduced back in Sections 3.8–3.11 (goldens, pushing/pulling from Confident AI), but not actually used since. This section finally puts it to real use.
+3. **Keeping actual vs. expected output organized in one central place** — directly tied to point 2, since Confident AI's dataset feature is exactly that central place.
+
+*In plain terms: points 2 and 3 are really the same underlying idea — the golden dataset mechanic built earlier in the course was somewhat abandoned once real RAG-application testing started (Section 5), and this section is where it finally gets reconnected to real, multi-question testing.*
+
+### A forward-looking connection to RAGAS
+The instructor notes that RAGAS (the other major tool this course covers) has its own concepts of **single-shot** vs. **multi-shot** testing/datasets — multiple datasets being effectively mandatory there. Understanding this DeepEval section first should make those RAGAS concepts click faster later, and vice versa — the two tools' approaches to "testing more than one input at a time" are conceptually the same idea, just named differently.
+
+### Setup: reusing, not rebuilding
+A new notebook is set up for this section — literally copy-pasted from Section 5.3's "Testing Rag" notebook (renamed with an "Advanced" suffix), keeping the exact same RAG application, dependencies, `LLMTestCase`, and G-Eval structure already built. Nothing about the underlying RAG app changes — only the *test cases themselves* will change starting next lecture, to support multiple inputs instead of just one.
+
+### A note on how to approach this section
+Explicitly flagged as not a "watch passively" section — following along by actually writing the code alongside the lecture is recommended, since it's meaningfully more advanced than what's been covered before.
+
+---
+
+## Section 6.2 — Building a Multi-Question `test_data` Array, Reusing Section 3.10's Pattern
+
+### Cleaning up, keeping the essentials
+Starting from the copied notebook (Section 6.1), the earlier single-test-case + G-Eval evaluation code gets removed — only the core `ChatOllama` setup and the RAG chain itself (Section 5.3) stay, as the foundation to build multi-question testing on top of.
+
+### The `test_data` array
+Explicitly reusing the exact pattern from **Section 3.10** ("Creating Evaluation Dataset as Goldens in Confident AI") — a plain Python list of `{input, expected_output}` dicts — now filled with three real questions about the RAG app's actual subject (MCP), instead of the earlier toy examples ("who is president," "who built GPT"):
+```python
+test_data = [
+    {
+        "input": "What is MCP?",
+        "expected_output": "..."  # copied from the real source site, Section 5.4
+    },
+    {
+        "input": "What is the relationship between function calling and MCP?",
+        "expected_output": "..."  # copied from the RAG app's own earlier answer, Section 5.3
+    },
+    {
+        "input": "What are the core components of MCP? Just give me the heading.",
+        "expected_output": "..."  # the four core components, pulled from the actual MCP docs page
+    }
+]
+```
+
+*In plain terms: nothing conceptually new here — this is the same golden-array pattern already built and pushed to Confident AI back in Section 3.10, just populated with real, meaningful questions about a real working RAG app instead of illustrative toy examples. The payoff of learning that pattern early is showing up now: building three real test cases is just filling out the same list-of-dicts shape three times over.*
+
+### What's next
+The next lecture converts this `test_data` array into goldens, builds the `EvaluationDataset`, and pushes it to Confident AI — same mechanics as Section 3.10, applied to this real dataset.
+
+---
+
+## Section 6.3 — Pushing the 3-Question Golden Dataset to Confident AI
+
+### Same code as before, applied to the new data
+Straightforward reuse of Section 3.10's exact pattern — convert `test_data` into goldens, wrap them in an `EvaluationDataset`. A quick, relatable notebook slip along the way: a "data is not defined" error, simply because the `test_data` cell hadn't been executed yet before running the next one — fixed by just running it.
+
+### Empty test cases, for now
+Right after creating the dataset, it holds **3 goldens** but **0 test cases** — the same distinction from Section 3.8: goldens exist, but they haven't been converted into actual test cases yet. That conversion happens later, once real data gets *pulled* back from Confident AI.
+
+### Pushing — and a real overwrite prompt
+```python
+dataset.push(alias="test", overwrite=True)
+```
+Since a dataset with the alias `"test"` already existed (from earlier work), pushing prompts: *"dataset with alias 'test' already exists, do you want to overwrite?"* — confirmed yes, replacing the old contents with these 3 new MCP-related questions. Checking the Confident AI portal confirms all three now show up: "What is MCP?", the function-calling relationship question, and the core-components question.
+
+### What's still missing — and why
+Neither `actual_output` nor `retrieval_context` are populated yet. `actual_output` is expected — it has to come from actually running the RAG app. But `retrieval_context` gets flagged as something genuinely new: up to now, every `retrieval_context` used in this course has been **hand-typed** by the instructor as a stand-in. This section is where it'll actually be pulled from the RAG pipeline's own real retrieval step for the first time — the genuinely "advanced" part promised back in Section 6.1.
+
+### What's next
+The next lecture starts filling in both `actual_output` and a *real* `retrieval_context`, sourced directly from running the actual RAG application against each of these three questions.
+
+---
+
+## Section 6.4 — Getting Real `actual_output` and `retrieval_context` Out of the RAG Pipeline
+
+### Pulling first
+`dataset.pull(alias="test")` fetches the 3 goldens back down and converts them into real `LLMTestCase` objects — `input` and `expected_output` populated, `actual_output` still `None`, waiting to be filled.
+
+### Two separate things need two separate calls
+- **`actual_output`** — the RAG app's generated answer.
+- **`retrieval_context`** — the raw chunks the vector store actually retrieved for that question, *before* the LLM ever sees them.
+
+### Getting `actual_output` — a higher-level LangChain wrapper: `RetrievalQA`
+Instead of the custom chain built by hand in Section 5.3 (prompt template + string output parser), this uses a pre-built LangChain class that bundles retrieval and generation together in one step:
+```python
+qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
+response = qa_chain("What is MCP?")
+```
+`response` here is the generated answer — this becomes `actual_output`.
+
+### Getting `retrieval_context` — going straight to the vector store, bypassing the LLM
+The RAG app already had a `retriever` object and a `retrieve_and_format` helper (built back in Section 5.3) that fetches relevant chunks from the vector store and formats them as text:
+```python
+retrieved_document = retrieve_and_format("What is MCP?")
+```
+Calling this directly — **without going through `qa_chain`/the LLM at all** — returns exactly the raw content the vector store considers relevant to the question. This *is* `retrieval_context`.
+
+*In plain terms: this is the concrete, hands-on version of the RAG theory from Course 1 (Sections 1.2, 4.5, 4.6) and this course's own Section 5.2 — `retrieval_context` was always described as "whatever the vector store's similarity search pulled back for this question," and here that's literally what's happening in code: `retrieve_and_format` runs the same similarity search the RAG app itself uses internally, just called directly instead of hidden inside the chain.*
+
+### Combining both into one helper
+```python
+def query_with_context(question):
+    response = qa_chain(question)
+    retrieved_document = retrieve_and_format(question)
+    return response, retrieved_document
+```
+`query_with_context("What is MCP?")` now returns both pieces together in one call — the actual output and the retrieval context, ready to be dropped into a test case.
+
+### What's next
+The next lecture combines this helper with the pulled goldens to build fully-populated `LLMTestCase`s — input, expected output (from the golden), and now real `actual_output`/`retrieval_context` (from this helper) — all fused together.
+
+---
+
+## Section 6.5 — A Proper, Typed Function: Goldens → Fully-Populated Test Cases
+
+### The function
+Rather than the ad-hoc inline for-loops used back in Sections 3.9 and 3.11, this builds a clean, properly-typed reusable function:
+```python
+from deepeval.dataset import Golden
+from deepeval.test_case import LLMTestCase
+from typing import List
+
+def convert_goldens_to_test_case(goldens: List[Golden]) -> List[LLMTestCase]:
+    test_cases = []
+    for golden in goldens:
+        response, context = query_with_context(golden.input)
+        test_case = LLMTestCase(
+            input=golden.input,
+            actual_output=response,
+            expected_output=golden.expected_output,
+            retrieval_context=context  # must be a list
+        )
+        test_cases.append(test_case)
+    return test_cases
+```
+Called as: `convert_goldens_to_test_case(dataset.goldens)`.
+
+### What's actually happening, and why this is the payoff of the whole section
+For each of the 3 goldens, `golden.input` gets passed into `query_with_context` (Section 6.4) — which runs the *real* RAG pipeline and returns both a real generated `actual_output` and a real, freshly-retrieved `retrieval_context` for that specific question. Each resulting `LLMTestCase` now carries genuine input, actual output, expected output, *and* retrieval context — no hardcoded or mock values anywhere in the chain.
+
+*In plain terms: this function is where every thread from this "advanced" section (6.1–6.5) actually converges — the golden dataset mechanic (Section 3.8, finally put to real use per Section 6.1's promise), multiple questions tested together instead of one at a time, and `retrieval_context` sourced live from the vector store instead of typed by hand (Section 6.4). It's also a small but real code-quality upgrade over the earlier loops: a proper function with type hints (`List[Golden]` in, `List[LLMTestCase]` out), rather than one-off inline code — the kind of thing worth reusing across a real test suite rather than rewriting each time.*
+
+### What's next
+The next lecture actually runs the evaluation using these fully-populated test cases.
+
+---
+
+## Section 7.1 — New Section: Testing AI Agent Tool Calling
+
+### Where RAG's limitation leads to agents
+RAG (Sections 5–6) solved a real problem — grounding the LLM in retrieved documentation fixed the "What is MCP?" knowledge gap. But RAG only ever *retrieves and reads* — it can't *act*. An **AI agent** is the next step: giving the LLM the ability to actually interact with the external world — browse the web, touch a file system, access Google Drive or Gmail — not just read from a fixed data store.
+
+### MCP, revisited in the agent context
+The same MCP framing already covered in Course 1 (Sections 7.1–7.3) comes back here: MCP as a "universal bridge" between AI systems and external tools/data, solving the "isolated, fragmented systems requiring custom connectors" problem. The distinction drawn here: RAG connects an LLM to *data* it can read; an agent (often built via MCP) connects an LLM to *tools* it can actually *use*.
+
+### A live demo: Claude Desktop + a Playwright MCP server, actually controlling a browser
+The instructor built his own MCP server exposing Playwright browser-automation tools, registered with Claude Desktop. Asking it, *"Can you navigate to eaapp.com and perform login by clicking the Login link and entering a username and password"* — Claude Desktop actually invokes the `playwright_navigate` tool, opens a real browser, takes a screenshot, and clicks the login link — driven entirely by the LLM deciding which tool to call and with what arguments.
+
+*In plain terms: this is functionally the same category of thing as `browser-use`, tried hands-on earlier in this session — an LLM with real, tool-mediated control over a browser, rather than just generating text about one. Different implementation (MCP + Playwright + Claude Desktop here, vs. the standalone `browser-use` Python library tried before), same underlying idea: tools turn a text-only model into something that can actually *do* things.*
+
+Reference again to the instructor's own separate course ("Build and Test AI Agent, RAGs and Chatbots"), which covers building custom tools from scratch — addition/subtraction tools, a Wikipedia tool, a Playwright navigation tool, and even wiring the RAG system itself in as *one of the tools* an agent can call.
+
+### The key illustrative example: routing behavior
+- Ask *"Does the page have any biased view? If so, what are they?"* → the agent routes this to the **RAG tool**, since that's where bias-related information actually lives.
+- Ask *"What is the addition of 20 and 40?"* → even though the LLM could easily answer this from its own reasoning, if an **addition tool** is registered/bound to the agent, it still routes the request there rather than answering directly.
+
+*In plain terms — a subtle but important behavior worth remembering: an agent with a bound tool available tends to prefer using that tool over answering from its own knowledge, even for something trivially easy for the LLM itself. This matters directly for testing: it means "did the agent pick the right tool" isn't just about hard questions the LLM genuinely can't answer alone — it also applies to easy questions, where using the *wrong* tool (or skipping an available correct one) is still a real bug.*
+
+### The working definition
+"An AI agent, in a nutshell, uses the LLM as a **decision engine**, and acts as a **router** — sending a specific request to a specific bound tool. If no matching tool exists, it falls back to the LLM's own knowledge to answer directly."
+
+*In plain terms: this is the exact same idea already worked through in this session's own earlier "LLM vs. Agent" conversation (why not just use an LLM directly — because an agent adds tools + a decision loop on top) and maps directly onto the lower rungs of Course 1's Section 6.3 autonomy table ("Router" and "Tool call" levels) — same concept, now given a name specific to this context: routing.*
+
+### What this section is really building toward
+The natural next question — and the actual subject of this section — is **testing whether an agent invokes the correct/relevant tool** for a given request. This is the practical, hands-on version of "Tool Selection Accuracy," already named as a metric back in Course 1's Section 1.5 and referenced again in this course's own Sections 1.5 and 3.1 (agentic metrics: task completion, tool correctness).
+
+---
+
+## Section 7.2 — The Agent Under Test: Three Tools, and Why Intermediate Steps Matter
+
+### The setup being tested
+A new notebook ("Testing AI agent tool calling with DeepEval") containing a simple pre-built AI agent — the *implementation* isn't the focus, the agent is just the thing being tested:
+- **LLM:** Qwen 2.5 this time (a switch from DeepSeek R1 used in earlier sections).
+- **Three tools bound to the agent:**
+  1. `add` — adds two numbers
+  2. `subtract` — subtracts two numbers
+  3. **DuckDuckGo search** — real-time web search
+
+### Demo 1 — the plain LLM's limitation
+Asking Qwen 2.5 directly, *"Who is the current president of USA in 2025? Just give me the name"* → it declines: training data has a cutoff, no real-time capability.
+
+### Demo 2 — same question, through the agent
+A custom `query_ai_agent` helper invokes the agent and returns not just the answer but the **intermediate steps** — which tool was called, and what input was passed to it. Running the same question:
+- The agent automatically invokes **DuckDuckGo search** (since the LLM recognizes it lacks real-time knowledge).
+- Search returns that the incumbent president is Donald Trump, who assumed office Jan 20, 2025.
+- Final output: *"The current president of the USA is Donald Trump."*
+
+*In plain terms: this is the running Biden/Trump example from Sections 3.4, 3.11, and 4.3 finally getting a genuinely correct, current answer — not because the model got smarter, but because it was given a tool that could go look it up. Same model, same question, completely different outcome once a search tool exists.*
+
+### Demo 3 — routing even for trivial work
+*"What is the sum of 20 and 90?"* → the agent invokes the bound `add_numbers` tool with those parameters, gets 110, and answers 110.
+
+*In plain terms: exactly the routing behavior described in Section 7.1 — the LLM could obviously do this arithmetic itself, but with an addition tool bound, it routes there anyway.*
+
+### Why the verbose intermediate steps are the whole point
+The instructor is explicit about why `query_ai_agent` deliberately exposes tool calls and tool inputs: **these are precisely what agent testing needs**. Checking only the final answer isn't enough — you need to verify the agent picked the *right tool* and passed the *right arguments*.
+
+*In plain terms — this ties several threads together at once:*
+- *"Which tool was called" is exactly what **Tool Selection Accuracy** measures (Course 1 Section 1.5; this course's Sections 1.5 and 3.1).*
+- *"What input was passed to it" is exactly what **Function/Argument Accuracy** measures — the "right tool, wrong argument" failure mode called out in Section 1.5.*
+- *And these map directly onto the `tools_called` / `expected_tools` fields spotted on `LLMTestCase` back in Section 3.5 — this lecture shows where that data actually comes from in a real agent.*
+
+*One more concrete connection: this repo's own `shoe_store_agent.py` (Phase 4 of the roadmap) already does exactly this — a hand-rolled ReAct agent with three tools that returns a structured trace containing `tool_calls` with each call's name, args, and observation. Same pattern, built from scratch there; here it's LangChain's version of it. That existing file is essentially a ready-made target for the DeepEval agent testing this section is about to cover.*
+
+### What's next
+A diagrammatic view of how to actually test this agent with DeepEval.
+
+---
+
+## Section 7.3 — The Testing Flow, Diagrammatically
+
+### The path a single agent test takes
+An `LLMTestCase` (input: *"What is the sum of 20 and 40?"*) → DeepEval → the Qwen 2.5 model → the model invokes the **AI agent** → the agent looks through its bound tools → the matching tool runs and responds → that comes back through to DeepEval → DeepEval scores it against whatever metric is configured (here, a **tool-calling/tool-correctness metric**).
+
+### What DeepEval actually has to verify
+Four distinct things, not just "was the answer right":
+1. **Which tool was called** — and was it the *expected* tool? (The expected tool has to be supplied in the test data.)
+2. Whether the tool received the **correct input parameters**.
+3. Whether the **output** matches what was expected.
+4. What response actually came back from the tool call.
+
+### Why this matters at real-world scale
+In a company setting, an agent may have **thousands** of tools bound to it (custom + external). The testing concern isn't just "does it work once" — it's that the agent must *consistently* pick the correct tool for a given query, and **even a slightly reworded version of the same query should still route to the same correct tool**.
+
+*In plain terms: that last point is really a robustness requirement — agent tool-routing shouldn't be brittle to phrasing. "What is the sum of 20 and 40," "add 20 and 40," and "20 plus 40 is?" should all land on the same tool. That's a genuinely different kind of test from checking a single fixed input, and it's the sort of thing that gets fragile fast as the tool count grows.*
+
+---
+
+## Section 7.4 — Building Agent Test Data with the `ToolCall` Class
+
+### Setup change
+Same Confident AI + local-LLM setup as before, but the judge model switches to **Qwen 2.5 latest** (instead of DeepSeek R1 used in Sections 3.13 onward), matching the model the agent itself uses.
+
+### New: the `ToolCall` class
+Test data now needs to express *which tool is expected to be called* — and that requires a class, the first time a class has appeared inside test-data creation in this course:
+```python
+from deepeval.test_case import ToolCall
+
+test_data = [
+    {
+        "input": "What is the sum of 20 and 40?",
+        "expected_output": "60",
+        "tool_called": ToolCall(name="add_numbers")
+    }
+]
+```
+`ToolCall` can also carry input parameters, but that's deliberately skipped here to keep the first example simple.
+
+### Building the test case
+`LLMTestCase` turns out to have a **`tools_called`** field — exactly the field spotted in passing back in Section 3.5, now finally used for real. A small slip along the way worth noting: `test_data[0].input` doesn't work (these are plain dicts), corrected to `test_data[0]["input"]`.
+
+For now, `actual_output` stays hardcoded as `60` — wiring in the real agent comes two lectures later.
+
+---
+
+## Section 7.5 — `ToolCorrectnessMetric`, and a Real DeepEval Limitation
+
+### The metric
+```python
+from deepeval.metrics import ToolCorrectnessMetric
+
+metric = ToolCorrectnessMetric()
+metric.measure(test_case=test_case)
+```
+
+### The limitation: `.measure()` only — `evaluate()` doesn't work here
+Trying to use `evaluate()` (the Confident-AI-connected method from Section 3.6) fails with: *"unable to evaluate test cases that are not of type LLMTestCase using the non-conventional ToolCorrectnessMetric."* This is a genuine current limitation of DeepEval — **tool correctness can only be measured offline, via `.measure()`**; it can't be pushed to the Confident AI portal with graphs/history like other metrics.
+
+Consequence: the whole `EvaluationDataset` layer isn't needed here either — just build the test case directly and pass it into `.measure()`.
+
+### A second error, and the fix
+Running it complains that **`expected_tools` is not given**. The `LLMTestCase` needs both sides of the comparison:
+```python
+test_case = LLMTestCase(
+    input=...,
+    actual_output=...,
+    tools_called=[ToolCall(name="add_numbers")],     # what the agent actually called
+    expected_tools=[ToolCall(name="add_numbers")]    # what it should have called
+)
+```
+
+### Results, including a negative test
+- Matching tool names → score **1.0** (pass).
+- Deliberately changing the expected tool name to something like `add_a_number` → score **0.0** (fail), correctly detecting the wrong tool.
+
+### The most important observation: this metric doesn't use an LLM at all
+Everything here runs **completely offline** — no LLM call, no Confident AI, nothing.
+
+*In plain terms — this is a genuinely significant departure from everything else in this course. Section 3.3 established that essentially every DeepEval metric runs on "LLM as a judge" under the hood. `ToolCorrectnessMetric` is the exception: comparing "which tool was called" against "which tool should have been called" is a plain, deterministic string/structure comparison — no judgment call needed, so no judge model needed. That also explains why it can't push results to Confident AI the same way, and why it's instant rather than taking seconds/minutes like the LLM-judged metrics in Section 5.5. Practically: this metric is fast, free, and fully reproducible — unlike the non-deterministic LLM-judged scores seen varying run-to-run back in Sections 3.4 and 4.4.*
+
+---
+
+## Section 7.6 — Wiring in the Real Agent
+
+### Replacing hardcoded values
+The hardcoded `actual_output` and `tools_called` get replaced with real data from the agent, using the `query_ai_agent` helper (Section 7.2):
+```python
+response, tool, tool_input = query_ai_agent(test_data[0]["input"])
+
+test_case = LLMTestCase(
+    input=test_data[0]["input"],
+    actual_output=response,                       # real agent response
+    tools_called=[ToolCall(name=tool)],           # the tool the agent ACTUALLY called
+    expected_tools=[test_data[0]["tool_called"]]  # the tool it SHOULD have called
+)
+```
+Note `expected_output` isn't really needed for this particular metric — tool correctness only cares about the tool comparison.
+
+### The result
+Running it now genuinely invokes the real agent behind the scenes. Inspecting the test case confirms `tools_called` = `add_numbers` and `expected_tools` = `add_numbers` — and `.measure()` returns **1.0**.
+
+*In plain terms: this is the agent-testing equivalent of what Section 6.5 did for RAG — replacing every mock/hardcoded value with real data pulled from the actual system under test. The structure `(tool name, tool input, response)` returned by `query_ai_agent` is precisely the shape needed to populate an agent test case — and it's the same shape this repo's own `shoe_store_agent.py` trace already produces (`tool_calls` with name, args, observation), which means that existing hand-rolled agent could be dropped into this exact testing pattern with very little adaptation.*
+
+### What's next
+A few more agent tests to round out the section.
+
+---
+
+## Section 7.7 — Testing Multiple Tools: Does the Agent Route Each Query Correctly?
+
+### Adding a second tool to the test set
+So far only the addition tool was tested. Now the **DuckDuckGo search** tool gets covered too, with a second entry in `test_data`:
+```python
+test_data = [
+    {"input": "What is the sum of 20 and 40?", "expected_output": "60",
+     "tool_called": ToolCall(name="add_numbers")},
+    {"input": "Who is the president of USA in 2025? Just give me the name.", "expected_output": "Donald Trump",
+     "tool_called": ToolCall(name="duckduckgo_search")}
+]
+```
+
+### Two loops: build, then measure
+Building all test cases by iterating the data (each one hitting the real agent):
+```python
+test_cases = []
+for data in test_data:
+    response, tool, tool_input = query_ai_agent(data["input"])
+    test_cases.append(LLMTestCase(
+        input=data["input"],
+        actual_output=response,
+        tools_called=[ToolCall(name=tool)],
+        expected_tools=[data["tool_called"]]
+    ))
+```
+Then measuring each, printing the metric's introspection fields:
+```python
+for test_case in test_cases:
+    metric.measure(test_case=test_case)
+    print(metric.score)
+    print(metric.reason)
+    print(metric.expected_tools)
+```
+
+### Results — both route correctly
+- **Math question** → `add_numbers` called → score **1.0**, with the reason text: *"all expected add_numbers were called; order is not considered."*
+- **President question** → `duckduckgo_search` called → score **1.0**.
+
+*In plain terms: this is the actual goal from Section 7.3 demonstrated end-to-end — two very different queries, two different correct tools, and the metric confirming each was routed properly. This is what "Tool Selection Accuracy" (Course 1 Section 1.5) looks like as running code.*
+
+### A detail buried in the reason text worth catching: *"order is not considered"*
+By default, `ToolCorrectnessMetric` checks **which** tools were called, not the **order** they were called in.
+
+*In plain terms: fine for single-tool cases like these two, but genuinely important to know for a multi-step agent that chains several tools in sequence — if your agent must (say) look up an order *before* processing a refund, a metric that ignores ordering would happily pass an agent that did those backwards. Worth checking DeepEval's options for order-sensitive comparison if that ever matters. (This repo's own `shoe_store_agent.py` is exactly such a case — its whole policy logic depends on looking up the order first.)*
+
+### Section recap
+The one standing caveat remains from Section 7.5: agent tool-correctness testing runs **locally only** — no LLM-as-judge, no Confident AI dashboard. But for verifying tool routing, that's fine (and arguably better: deterministic and instant). Everything else about the workflow mirrors the rest of the course.
+
+---
+
 *(Next section's notes get appended below as more transcripts/screenshots come in.)*
