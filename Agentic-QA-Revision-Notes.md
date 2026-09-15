@@ -591,3 +591,21 @@ A model's behavior can quietly change over time - the provider updates it, or re
 ---
 
 **The full 22-week roadmap is complete.** Phases 0-6 done, three portfolio projects built and pushed to https://github.com/mohit03nandan/agentic-qa-project-1, and several genuinely real bugs found along the way (prompt injection leak, RAG retrieval miss, a judge that hallucinated a passing grade, a policy-violation agent bug, and a self-contradicting adversarial failure). Remaining ongoing work lives in the "Proof of Work" section of the roadmap - case studies, an open-source contribution, and interview practice.
+
+---
+
+## Refresher, 2026-09-14 — What Is an LLM?
+
+**One line:** an LLM is a computer program that reads huge amounts of text during training, and then answers you by guessing the most likely next word, over and over, until it has a full reply.
+
+**LLM stands for "Large Language Model."**
+- **Language** — it works with words and text.
+- **Model** — a program trained on examples to do one job well (here: predicting text).
+- **Large** — trained on a huge pile of text (much of the public internet, books, code), using a huge number of internal settings ("parameters") that get tuned during training.
+
+**What it's actually doing, in plain terms:**
+It does not look up facts in a database. It does not "understand" the way a person does. It has read so much text that it learned the *patterns* of how words follow other words. When you ask it something, it predicts the next word, then the next, then the next — each guess based on everything typed so far — until it has produced a full answer.
+
+**A simple analogy:** it's like the world's best autocomplete. Your phone's keyboard suggests the next word based on a little bit of pattern-learning. An LLM does the same trick, but trained on far more text, and far more skillfully, so the "autocomplete" reads like a real, reasoned answer.
+
+**Why this matters for testing:** because it's predicting likely words, not looking up truth, it can produce a wrong answer that *sounds* just as confident as a right one — that's the root cause behind hallucination (already covered in Phase 1, Week 4) and behind why the same question can get different answers each time (Phase 1, Week 3 — temperature/sampling). Every later testing concept in this file traces back to this one fact: an LLM is a very good next-word guesser, not a database of truth.
